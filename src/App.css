@@ -2,6 +2,7 @@
   min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
+  padding-bottom: 86px;
   background: #f7f8fb;
   color: #1d2433;
 }
@@ -18,6 +19,44 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.page-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab-button {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  color: #526071;
+  background: transparent;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tab-button.active {
+  color: #111827;
+  background: #ffffff;
+  border-color: #d8dee9;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1);
+}
+
+.tab-button:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: #d8dee9;
 }
 
 .eyebrow {
@@ -310,6 +349,48 @@ svg {
   background: #ffffff;
 }
 
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.settings-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+.settings-heading div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-heading strong {
+  color: #111827;
+  font-size: 14px;
+}
+
+.settings-heading span {
+  color: #697386;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr);
+  gap: 14px;
+}
+
 .field-block {
   min-width: 0;
   display: flex;
@@ -374,11 +455,16 @@ textarea:focus,
 
 .segment {
   min-width: 0;
+  padding: 0 12px;
   color: #526071;
   background: transparent;
   border-radius: 6px;
   cursor: pointer;
   font-weight: 700;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .segment.active {
@@ -390,7 +476,7 @@ textarea:focus,
 .preview-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   color: #697386;
   font-size: 13px;
@@ -520,8 +606,35 @@ textarea:focus,
   align-items: end;
 }
 
-.batch-series-top .field-block {
+.batch-series-title-row {
+  min-width: 0;
   flex: 1 1 360px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: end;
+  gap: 10px;
+}
+
+.batch-series-title-row .field-block {
+  flex: 1 1 360px;
+}
+
+.series-check {
+  width: 34px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #f8fbff;
+  border: 1px solid #d8dee9;
+  cursor: pointer;
+}
+
+.series-check input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: #1463ff;
 }
 
 .batch-series-actions {
@@ -1002,6 +1115,53 @@ textarea:focus,
   gap: 16px;
 }
 
+.bottom-action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 22px;
+  border-top: 1px solid #cdd5e1;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -10px 28px rgba(16, 24, 40, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.bottom-action-summary {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+}
+
+.bottom-action-summary strong {
+  color: #111827;
+  font-size: 13px;
+}
+
+.bottom-action-summary span {
+  min-width: 0;
+  color: #697386;
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bottom-action-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .pane-heading {
   display: flex;
   align-items: center;
@@ -1341,8 +1501,33 @@ pre {
     border-top: 1px solid #d8dee9;
   }
 
+  .topbar,
+  .topbar-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .page-tabs {
+    flex-wrap: wrap;
+  }
+
+  .bottom-action-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .bottom-action-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .tool-strip,
   .control-grid,
+  .settings-grid,
   .platform-cookie-grid,
   .subtitle-grid,
   .ai-organizer-panel,

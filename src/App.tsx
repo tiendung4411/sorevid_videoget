@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -375,6 +375,7 @@ function App() {
   const [coverViewer, setCoverViewer] = useState<CoverViewer | null>(null)
   const [jobs, setJobs] = useState<DownloadJob[]>([])
   const [error, setError] = useState('')
+  const [activeTab, setActiveTab] = useState<'download' | 'settings'>('download')
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [startingDownload, setStartingDownload] = useState(false)
   const [chromeIntegration, setChromeIntegration] = useState<ChromeIntegrationStatus | null>(null)
@@ -1136,6 +1137,27 @@ function App() {
     )
   }
 
+  async function rescanSelectedTikTokItems() {
+    setError('')
+    const selectedOrganizedEntries = organizedBatch
+      .flatMap((series) => series.items)
+      .filter((entry) => selectedPreviewKeys.has(entry.key) && entry.item.directMediaUrl)
+    if (selectedOrganizedEntries.length === 0) {
+      setError('Select at least one resolved TikTok item to re-scan.')
+      return
+    }
+    try {
+      const message = await invoke<string>('queue_tiktok_rescan', {
+        request: {
+          items: selectedOrganizedEntries.map((entry) => directDownloadItemFromMetadata(entry.item, entry)),
+        },
+      })
+      setChromeIntegrationMessage(`${message} Keep a TikTok tab open so the extension can refresh them.`)
+    } catch (err) {
+      setError(String(err))
+    }
+  }
+
   async function saveCover(item: MetadataPreview) {
     setError('')
 
@@ -1344,19 +1366,225 @@ function App() {
             <p className="eyebrow">yt-dlp desktop client</p>
             <h1>BiliBili Downloader</h1>
           </div>
-          <button className="icon-button" type="button" onClick={refreshTools}>
-            {checkingTools ? <Loader2 className="spin" /> : <RefreshCw />}
-            <span>Check tools</span>
-          </button>
+          <div className="topbar-actions">
+            <nav className="page-tabs" aria-label="App sections">
+              <button
+                className={activeTab === 'download' ? 'tab-button active' : 'tab-button'}
+                type="button"
+                onClick={() => setActiveTab('download')}
+              >
+                Download
+              </button>
+              <button
+                className={activeTab === 'settings' ? 'tab-button active' : 'tab-button'}
+                type="button"
+                onClick={() => setActiveTab('settings')}
+              >
+                Settings
+              </button>
+            </nav>
+            <button className="icon-button" type="button" onClick={refreshTools}>
+              {checkingTools ? <Loader2 className="spin" /> : <RefreshCw />}
+              <span>Check tools</span>
+            </button>
+          </div>
         </header>
 
-        <section className="tool-strip" aria-label="Tool versions">
-          <ToolBadge label="yt-dlp" tool={tools.ytDlp} />
-          <ToolBadge label="ffmpeg" tool={tools.ffmpeg} />
-          <ToolBadge label="ffprobe" tool={tools.ffprobe} />
-        </section>
+        {activeTab === 'settings' && (
+          <>
+            <section className="tool-strip" aria-label="Tool versions">
+              <ToolBadge label="yt-dlp" tool={tools.ytDlp} />
+              <ToolBadge label="ffmpeg" tool={tools.ffmpeg} />
+              <ToolBadge label="ffprobe" tool={tools.ffprobe} />
+            </section>
 
-        <section className="chrome-integration-panel" aria-label="Chrome integration">
+            <section className="settings-panel" aria-label="AI organizer settings">
+              <div className="settings-heading">
+                <div>
+                  <strong>AI organizer</strong>
+                  <span>Used by the Batch organizer button on the Download tab.</span>
+                </div>
+              </div>
+              <div className="settings-grid">
+                <label className="field-block">
+                  <span>Google AI Studio API key</span>
+                  <input
+                    className="text-input"
+                    type="password"
+                    value={geminiApiKey}
+                    onChange={(event) => setGeminiApiKey(event.target.value)}
+                    placeholder="Paste API key"
+                  />
+                </label>
+                <label className="field-block">
+                  <span>Model</span>
+                  <input
+                    className="text-input"
+                    value={geminiModel}
+                    onChange={(event) => setGeminiModel(event.target.value)}
+                    placeholder="gemini-3.1-flash-lite"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="settings-panel" aria-label="Download output settings">
+              <div className="settings-heading">
+                <div>
+                  <strong>Output</strong>
+                  <span>Folder and media format used when starting downloads.</span>
+                </div>
+              </div>
+              <div className="control-grid">
+                <div className="field-block">
+                  <label>Download folder</label>
+                  <button
+                    className="path-button"
+                    type="button"
+                    onClick={chooseDownloadDir}
+                  >
+                    <FolderOpen />
+                    <span>{downloadDir || 'Choose folder'}</span>
+                  </button>
+                </div>
+
+                <div className="field-block">
+                  <label>Format preset</label>
+                  <div className="segmented format-presets">
+                    <SegmentButton active={downloadPreset === 'compatibleMp4'} onClick={() => setDownloadPreset('compatibleMp4')}>
+                      MP4
+                    </SegmentButton>
+                    <SegmentButton active={downloadPreset === 'bestQuality'} onClick={() => setDownloadPreset('bestQuality')}>
+                      Best
+                    </SegmentButton>
+                    <SegmentButton active={downloadPreset === 'audioOnly'} onClick={() => setDownloadPreset('audioOnly')}>
+                      Audio
+                    </SegmentButton>
+                    <SegmentButton active={downloadPreset === 'videoOnly'} onClick={() => setDownloadPreset('videoOnly')}>
+                      Video
+                    </SegmentButton>
+                    <SegmentButton active={downloadPreset === 'originalCodec'} onClick={() => setDownloadPreset('originalCodec')}>
+                      Original
+                    </SegmentButton>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {hasBilibiliUrl && (
+              <section className="subtitle-panel" aria-label="Subtitles and danmaku">
+                <div className="subtitle-panel-heading">
+                  <div>
+                    <strong>Subtitles & Danmaku</strong>
+                    <span>Download subtitle sidecars, BiliBili danmaku XML, or convert danmaku XML to ASS after download.</span>
+                  </div>
+                </div>
+
+                <div className="subtitle-grid">
+                  <div className="field-block">
+                    <label>Subtitles</label>
+                    <div className="segmented subtitle-modes">
+                      <SegmentButton active={subtitleMode === 'off'} onClick={() => setSubtitleMode('off')}>
+                        Off
+                      </SegmentButton>
+                      <SegmentButton active={subtitleMode === 'subtitles'} onClick={() => setSubtitleMode('subtitles')}>
+                        Subs
+                      </SegmentButton>
+                      <SegmentButton active={subtitleMode === 'auto'} onClick={() => setSubtitleMode('auto')}>
+                        Auto
+                      </SegmentButton>
+                      <SegmentButton active={subtitleMode === 'both'} onClick={() => setSubtitleMode('both')}>
+                        Both
+                      </SegmentButton>
+                    </div>
+                  </div>
+
+                  <div className="field-block">
+                    <label>Subtitle format</label>
+                    <div className="segmented">
+                      <SegmentButton active={subtitleFormat === 'srt'} onClick={() => setSubtitleFormat('srt')}>
+                        SRT
+                      </SegmentButton>
+                      <SegmentButton active={subtitleFormat === 'vtt'} onClick={() => setSubtitleFormat('vtt')}>
+                        VTT
+                      </SegmentButton>
+                    </div>
+                  </div>
+
+                  <div className="field-block">
+                    <label>Danmaku</label>
+                    <div className="segmented">
+                      <SegmentButton active={danmakuFormat === 'none'} onClick={() => setDanmakuFormat('none')}>
+                        Off
+                      </SegmentButton>
+                      <SegmentButton active={danmakuFormat === 'xml'} onClick={() => setDanmakuFormat('xml')}>
+                        XML
+                      </SegmentButton>
+                      <SegmentButton active={danmakuFormat === 'ass'} onClick={() => setDanmakuFormat('ass')}>
+                        ASS
+                      </SegmentButton>
+                    </div>
+                  </div>
+
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={embedSubtitles}
+                      disabled={subtitleMode === 'off'}
+                      onChange={(event) => setEmbedSubtitles(event.target.checked)}
+                    />
+                    <span>Embed subtitles into MP4 when possible</span>
+                  </label>
+                </div>
+              </section>
+            )}
+
+            <section className="platform-cookie-panel" aria-label="Platform cookie profiles">
+              <div className="cookie-panel-heading">
+                <div>
+                  <strong>Platform cookie profiles</strong>
+                  <span>
+                    {requiredPlatformKeys.length > 0
+                      ? 'Detected protected platforms from the pasted URLs.'
+                      : 'Choose a platform session before preview/download.'}
+                  </span>
+                </div>
+                {missingCookiePlatforms.length > 0 && (
+                  <small>
+                    Missing: {missingCookiePlatforms.map((key) => platformConfigs[key].label).join(', ')}
+                  </small>
+                )}
+              </div>
+
+              <div className="platform-cookie-grid">
+                {(Object.keys(platformConfigs) as PlatformKey[]).map((platformKey) => (
+                  <CookieProfileCard
+                    key={platformKey}
+                    platformKey={platformKey}
+                    profile={getCookieProfile(cookieProfiles, platformKey)}
+                    onChange={(profile) => updateCookieProfile(platformKey, profile)}
+                    onImport={() => chooseCookieFile(platformKey)}
+                    onExport={() => exportChromeCookies(platformKey)}
+                    onValidate={() => validateCookieProfile(platformKey)}
+                    onDelete={() => deleteCookieProfile(platformKey)}
+                    status={cookieStatuses[platformKey]}
+                    busy={cookieBusyPlatform === platformKey}
+                  />
+                ))}
+              </div>
+              {cookieMessage && <div className="cookie-manager-message">{cookieMessage}</div>}
+            </section>
+
+            <div className="notice">
+              <ShieldAlert />
+              <span>
+                {requiredPlatformKeys.length > 0
+                  ? `${requiredPlatformKeys.map((key) => platformConfigs[key].label).join(', ')} detected. The app will use the matching platform cookie profile for preview and download.`
+                  : 'Cookie files are sensitive. This app passes them only to local yt-dlp and does not upload or sync them.'}
+              </span>
+            </div>
+
+            <section className="chrome-integration-panel" aria-label="Chrome integration">
           <div className="chrome-integration-heading">
             <div className={`integration-icon ${chromeIntegration?.state || 'unknown'}`}>
               <Cable />
@@ -1413,8 +1641,11 @@ function App() {
               then select the <code>dist-extension</code> folder.
             </span>
           </div>
-        </section>
+            </section>
+          </>
+        )}
 
+        {activeTab === 'download' && (
         <section className="download-panel">
           <div className="field-block">
             <label htmlFor="urls">URLs</label>
@@ -1428,10 +1659,6 @@ function App() {
           </div>
 
           <div className="preview-actions">
-            <button className="icon-button" type="button" onClick={refreshMetadata}>
-              {checkingMetadata ? <Loader2 className="spin" /> : <RefreshCw />}
-              <span>Preview metadata</span>
-            </button>
             <span>{metadata.length > 0 ? `${metadata.length} preview ready` : 'Run preview before downloading protected links.'}</span>
           </div>
 
@@ -1463,15 +1690,12 @@ function App() {
                 </div>
               </div>
               <BatchOrganizer
+                aiReady={Boolean(geminiApiKey.trim())}
                 batchOrder={batchOrder}
-                geminiApiKey={geminiApiKey}
-                geminiModel={geminiModel}
                 isOrganizing={organizingBatch}
                 series={organizedBatch}
                 selectedKeys={selectedPreviewKeys}
                 onClearSeries={clearSeriesSelection}
-                onGeminiApiKeyChange={setGeminiApiKey}
-                onGeminiModelChange={setGeminiModel}
                 onOrganizeWithAi={organizeBatchWithAi}
                 onRenameSeries={renameBatchSeries}
                 onSelectSeries={selectSeries}
@@ -1493,183 +1717,9 @@ function App() {
             </section>
           )}
 
-          <div className="control-grid">
-            <div className="field-block">
-              <label>Download folder</label>
-              <button
-                className="path-button"
-                type="button"
-                onClick={chooseDownloadDir}
-              >
-                <FolderOpen />
-                <span>{downloadDir || 'Choose folder'}</span>
-              </button>
-            </div>
-
-            <div className="field-block">
-              <label>Format preset</label>
-              <div className="segmented format-presets">
-                <SegmentButton
-                  active={downloadPreset === 'compatibleMp4'}
-                  onClick={() => setDownloadPreset('compatibleMp4')}
-                >
-                  MP4
-                </SegmentButton>
-                <SegmentButton
-                  active={downloadPreset === 'bestQuality'}
-                  onClick={() => setDownloadPreset('bestQuality')}
-                >
-                  Best
-                </SegmentButton>
-                <SegmentButton
-                  active={downloadPreset === 'audioOnly'}
-                  onClick={() => setDownloadPreset('audioOnly')}
-                >
-                  Audio
-                </SegmentButton>
-                <SegmentButton
-                  active={downloadPreset === 'videoOnly'}
-                  onClick={() => setDownloadPreset('videoOnly')}
-                >
-                  Video
-                </SegmentButton>
-                <SegmentButton
-                  active={downloadPreset === 'originalCodec'}
-                  onClick={() => setDownloadPreset('originalCodec')}
-                >
-                  Original
-                </SegmentButton>
-              </div>
-            </div>
-          </div>
-
-          {hasBilibiliUrl && (
-            <section className="subtitle-panel" aria-label="Subtitles and danmaku">
-              <div className="subtitle-panel-heading">
-                <div>
-                  <strong>Subtitles & Danmaku</strong>
-                  <span>Download subtitle sidecars, BiliBili danmaku XML, or convert danmaku XML to ASS after download.</span>
-                </div>
-              </div>
-
-              <div className="subtitle-grid">
-                <div className="field-block">
-                  <label>Subtitles</label>
-                  <div className="segmented subtitle-modes">
-                    <SegmentButton active={subtitleMode === 'off'} onClick={() => setSubtitleMode('off')}>
-                      Off
-                    </SegmentButton>
-                    <SegmentButton active={subtitleMode === 'subtitles'} onClick={() => setSubtitleMode('subtitles')}>
-                      Subs
-                    </SegmentButton>
-                    <SegmentButton active={subtitleMode === 'auto'} onClick={() => setSubtitleMode('auto')}>
-                      Auto
-                    </SegmentButton>
-                    <SegmentButton active={subtitleMode === 'both'} onClick={() => setSubtitleMode('both')}>
-                      Both
-                    </SegmentButton>
-                  </div>
-                </div>
-
-                <div className="field-block">
-                  <label>Subtitle format</label>
-                  <div className="segmented">
-                    <SegmentButton active={subtitleFormat === 'srt'} onClick={() => setSubtitleFormat('srt')}>
-                      SRT
-                    </SegmentButton>
-                    <SegmentButton active={subtitleFormat === 'vtt'} onClick={() => setSubtitleFormat('vtt')}>
-                      VTT
-                    </SegmentButton>
-                  </div>
-                </div>
-
-                <div className="field-block">
-                  <label>Danmaku</label>
-                  <div className="segmented">
-                    <SegmentButton active={danmakuFormat === 'none'} onClick={() => setDanmakuFormat('none')}>
-                      Off
-                    </SegmentButton>
-                    <SegmentButton active={danmakuFormat === 'xml'} onClick={() => setDanmakuFormat('xml')}>
-                      XML
-                    </SegmentButton>
-                    <SegmentButton active={danmakuFormat === 'ass'} onClick={() => setDanmakuFormat('ass')}>
-                      ASS
-                    </SegmentButton>
-                  </div>
-                </div>
-
-                <label className="check-row">
-                  <input
-                    type="checkbox"
-                    checked={embedSubtitles}
-                    disabled={subtitleMode === 'off'}
-                    onChange={(event) => setEmbedSubtitles(event.target.checked)}
-                  />
-                  <span>Embed subtitles into MP4 when possible</span>
-                </label>
-              </div>
-            </section>
-          )}
-
-          <section className="platform-cookie-panel" aria-label="Platform cookie profiles">
-              <div className="cookie-panel-heading">
-                <div>
-                  <strong>Platform cookie profiles</strong>
-                  <span>
-                    {requiredPlatformKeys.length > 0
-                      ? 'Detected protected platforms from the pasted URLs.'
-                      : 'Choose a platform session before preview/download.'}
-                  </span>
-                </div>
-                {missingCookiePlatforms.length > 0 && (
-                  <small>
-                    Missing: {missingCookiePlatforms.map((key) => platformConfigs[key].label).join(', ')}
-                  </small>
-                )}
-              </div>
-
-              <div className="platform-cookie-grid">
-                {(Object.keys(platformConfigs) as PlatformKey[]).map((platformKey) => (
-                  <CookieProfileCard
-                    key={platformKey}
-                    platformKey={platformKey}
-                    profile={getCookieProfile(cookieProfiles, platformKey)}
-                    onChange={(profile) => updateCookieProfile(platformKey, profile)}
-                    onImport={() => chooseCookieFile(platformKey)}
-                    onExport={() => exportChromeCookies(platformKey)}
-                    onValidate={() => validateCookieProfile(platformKey)}
-                    onDelete={() => deleteCookieProfile(platformKey)}
-                    status={cookieStatuses[platformKey]}
-                    busy={cookieBusyPlatform === platformKey}
-                  />
-                ))}
-              </div>
-              {cookieMessage && <div className="cookie-manager-message">{cookieMessage}</div>}
-            </section>
-
-          <div className="notice">
-            <ShieldAlert />
-            <span>
-              {requiredPlatformKeys.length > 0
-                ? `${requiredPlatformKeys.map((key) => platformConfigs[key].label).join(', ')} detected. The app will use the matching platform cookie profile for preview and download.`
-                : 'Cookie files are sensitive. This app passes them only to local yt-dlp and does not upload or sync them.'}
-            </span>
-          </div>
-
           {error && <div className="error-line">{error}</div>}
-
-          <div className="action-row">
-            <div className="url-count">
-              {metadata.length > 0
-                ? `${selectedMetadata.length} item${selectedMetadata.length === 1 ? '' : 's'} selected`
-                : `${urls.length} URL${urls.length === 1 ? '' : 's'} ready`}
-            </div>
-            <button className="primary-button" type="button" onClick={startDownload} disabled={startingDownload}>
-              <Download />
-              <span>{startingDownload ? 'Starting...' : 'Start download'}</span>
-            </button>
-          </div>
         </section>
+        )}
       </section>
 
       <aside className="jobs-pane">
@@ -1706,6 +1756,37 @@ function App() {
           </div>
         )}
       </aside>
+
+      <section className="bottom-action-bar" aria-label="Download actions">
+        <div className="bottom-action-summary">
+          <strong>
+            {metadata.length > 0
+              ? `${selectedMetadata.length}/${metadata.length} selected`
+              : `${urls.length} URL${urls.length === 1 ? '' : 's'} ready`}
+          </strong>
+          <span>{downloadDir || 'No output folder selected'}</span>
+        </div>
+        <div className="bottom-action-controls">
+          <button className="secondary-button" type="button" onClick={() => setActiveTab('settings')}>
+            <FolderOpen />
+            <span>Settings</span>
+          </button>
+          <button className="secondary-button" type="button" onClick={refreshMetadata} disabled={checkingMetadata}>
+            {checkingMetadata ? <Loader2 className="spin" /> : <RefreshCw />}
+            <span>Preview</span>
+          </button>
+          {metadata.some((item) => item.directMediaUrl) && (
+            <button className="secondary-button" type="button" onClick={rescanSelectedTikTokItems}>
+              <RefreshCw />
+              <span>Re-scan selected</span>
+            </button>
+          )}
+          <button className="primary-button" type="button" onClick={startDownload} disabled={startingDownload}>
+            <Download />
+            <span>{startingDownload ? 'Starting...' : 'Start download'}</span>
+          </button>
+        </div>
+      </section>
 
       {coverViewer && (
         <CoverModal viewer={coverViewer} onClose={() => setCoverViewer(null)} />
@@ -1830,30 +1911,24 @@ function CookieProfileCard({
 }
 
 function BatchOrganizer({
+  aiReady,
   batchOrder,
-  geminiApiKey,
-  geminiModel,
   isOrganizing,
   series,
   selectedKeys,
   onClearSeries,
-  onGeminiApiKeyChange,
-  onGeminiModelChange,
   onOrganizeWithAi,
   onRenameSeries,
   onSelectSeries,
   onSetBatchOrder,
   onUpdateItem,
 }: {
+  aiReady: boolean
   batchOrder: BatchOrderMode
-  geminiApiKey: string
-  geminiModel: string
   isOrganizing: boolean
   series: OrganizedSeries[]
   selectedKeys: Set<string>
   onClearSeries: (series: OrganizedSeries) => void
-  onGeminiApiKeyChange: (value: string) => void
-  onGeminiModelChange: (value: string) => void
   onOrganizeWithAi: () => void
   onRenameSeries: (series: OrganizedSeries, title: string) => void
   onSelectSeries: (series: OrganizedSeries) => void
@@ -1893,6 +1968,15 @@ function BatchOrganizer({
             <option value="reverse">Reverse order</option>
             <option value="episodeNumber">Sort by episode</option>
           </select>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={onOrganizeWithAi}
+            disabled={isOrganizing || !aiReady}
+          >
+            {isOrganizing ? <Loader2 className="spin" /> : <RefreshCw />}
+            <span>{isOrganizing ? 'Organizing...' : 'Organize with AI'}</span>
+          </button>
           <button className="secondary-button" type="button" onClick={copyAiPrompt}>
             <FileText />
             <span>{copiedPrompt ? 'Copied' : 'Copy AI prompt'}</span>
@@ -1900,50 +1984,29 @@ function BatchOrganizer({
         </div>
       </div>
 
-      <div className="ai-organizer-panel">
-        <label>
-          <span>Google AI Studio API key</span>
-          <input
-            className="text-input"
-            type="password"
-            value={geminiApiKey}
-            onChange={(event) => onGeminiApiKeyChange(event.target.value)}
-            placeholder="Paste API key"
-          />
-        </label>
-        <label>
-          <span>Model</span>
-          <input
-            className="text-input"
-            value={geminiModel}
-            onChange={(event) => onGeminiModelChange(event.target.value)}
-            placeholder="gemini-3.1-flash-lite"
-          />
-        </label>
-        <button
-          className="primary-button"
-          type="button"
-          onClick={onOrganizeWithAi}
-          disabled={isOrganizing || !geminiApiKey.trim()}
-        >
-          {isOrganizing ? <Loader2 className="spin" /> : <RefreshCw />}
-          <span>{isOrganizing ? 'Organizing...' : 'Organize with AI'}</span>
-        </button>
-      </div>
-
       <div className="batch-series-list">
         {series.map((group, groupIndex) => {
           const selectedCount = group.items.filter((entry) => selectedKeys.has(entry.key)).length
+          const checked = selectedCount === group.items.length
+          const indeterminate = selectedCount > 0 && selectedCount < group.items.length
           return (
             <article className="batch-series" key={group.id}>
               <div className="batch-series-top">
-                <div className="field-block compact">
-                  <label>Series {groupIndex + 1}</label>
-                  <input
-                    className="text-input"
-                    value={group.title}
-                    onChange={(event) => onRenameSeries(group, event.target.value)}
+                <div className="batch-series-title-row">
+                  <SeriesCheckbox
+                    checked={checked}
+                    indeterminate={indeterminate}
+                    label={`Select series ${groupIndex + 1}`}
+                    onChange={() => checked ? onClearSeries(group) : onSelectSeries(group)}
                   />
+                  <div className="field-block compact">
+                    <label>Series {groupIndex + 1}</label>
+                    <input
+                      className="text-input"
+                      value={group.title}
+                      onChange={(event) => onRenameSeries(group, event.target.value)}
+                    />
+                  </div>
                 </div>
                 <div className="batch-series-actions">
                   <span>
@@ -2090,6 +2153,38 @@ function MetadataCard({
         {item.warning && <small>{item.warning}</small>}
       </div>
     </article>
+  )
+}
+
+function SeriesCheckbox({
+  checked,
+  indeterminate,
+  label,
+  onChange,
+}: {
+  checked: boolean
+  indeterminate: boolean
+  label: string
+  onChange: () => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.indeterminate = indeterminate
+    }
+  }, [indeterminate])
+
+  return (
+    <label className="series-check" title={label}>
+      <input
+        ref={ref}
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        aria-label={label}
+      />
+    </label>
   )
 }
 

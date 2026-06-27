@@ -68,6 +68,21 @@ chrome.runtime.onInstalled.addListener(() => {
       documentUrlPatterns: supportedPatterns,
     })
   })
+  chrome.alarms.create('sorevid-browser-fallback', { periodInMinutes: 0.5 })
+})
+
+chrome.runtime.onStartup.addListener(() => {
+  chrome.alarms.create('sorevid-browser-fallback', { periodInMinutes: 0.5 })
+})
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== 'sorevid-browser-fallback') return
+  drainBrowserFallbackDownloads().catch(() => {
+    // Desktop app may be closed. The next alarm will try again.
+  })
+  drainRescanItems().catch(() => {
+    // Desktop app may be closed. The next alarm will try again.
+  })
 })
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -153,6 +168,116 @@ function sendUrl(url: string, title: string | undefined, trigger: Trigger) {
       resolve(response)
     })
   })
+}
+
+async function drainBrowserFallbackDownloads() {
+  const request: NativeRequest = {
+    version: 1,
+    id: requestId(),
+    action: 'drain_browser_downloads',
+  }
+  const response = await sendNative(request)
+  const items = response.browserDownloads || []
+  for (const item of items) {
+    await chrome.downloads.download({
+      url: item.mediaUrl,
+      filename: browserFallbackFilename(item),
+      conflictAction: 'uniquify',
+      saveAs: false,
+    })
+    await wait(1200 + Math.random() * 1800)
+  }
+}
+
+async function drainRescanItems() {
+  const request: NativeRequest = {
+    version: 1,
+    id: requestId(),
+    action: 'drain_rescan_items',
+  }
+  const response = await sendNative(request)
+  const items = response.rescanItems || []
+  if (items.length === 0) return
+
+  const tab = await findTikTokTab()
+  if (!tab?.id) {
+    return
+  }
+  const resolved = await sendResolveUrlsMessage(
+    tab.id,
+    items.map((item) => item.pageUrl || item.sourceUrl),
+  )
+  if (!resolved.length) return
+  const cookieHeader = await tiktokCookieHeader(tab.url || 'https://www.tiktok.com/')
+  const merged = resolved.map((item) => ({ ...item, cookieHeader }))
+  await sendNative({
+    version: 1,
+    id: requestId(),
+    action: 'import_resolved_media',
+    items: merged,
+    source: {
+      pageUrl: tab.url,
+      title: tab.title,
+      platform: 'tiktok',
+      trigger: 'profile-scan',
+    },
+  })
+}
+
+async function findTikTokTab() {
+  const tabs = await chrome.tabs.query({ url: ['https://*.tiktok.com/*'] })
+  return tabs.find((tab) => tab.id !== undefined)
+}
+
+async function sendResolveUrlsMessage(tabId: number, urls: string[]) {
+  try {
+    const response = await chrome.tabs.sendMessage<
+      { type: 'resolve-tiktok-urls'; urls: string[]; mode: TikTokScanMode },
+      ScanTikTokProfileResponse
+    >(tabId, { type: 'resolve-tiktok-urls', urls, mode: 'safe' })
+    if (!response?.ok) return []
+    return response.items || []
+  } catch (error) {
+    if (!isMissingContentScriptError(error)) return []
+    await injectContentScript(tabId)
+    await wait(250)
+    const response = await chrome.tabs.sendMessage<
+      { type: 'resolve-tiktok-urls'; urls: string[]; mode: TikTokScanMode },
+      ScanTikTokProfileResponse
+    >(tabId, { type: 'resolve-tiktok-urls', urls, mode: 'safe' })
+    return response?.ok ? response.items || [] : []
+  }
+}
+
+function sendNative(request: NativeRequest) {
+  return new Promise<NativeResponse>((resolve, reject) => {
+    chrome.runtime.sendNativeMessage(NATIVE_HOST, request, (response: NativeResponse | undefined) => {
+      const error = chrome.runtime.lastError
+      if (error) {
+        reject(new Error(nativeErrorMessage(error.message || 'Unknown native messaging error.')))
+        return
+      }
+      if (!response) {
+        reject(new Error('Sorevid did not return a response.'))
+        return
+      }
+      resolve(response)
+    })
+  })
+}
+
+function browserFallbackFilename(item: ResolvedMediaItem) {
+  const folder = sanitizePathPart((item as ResolvedMediaItem & { outputFolder?: string }).outputFolder || item.uploader || 'TikTok')
+  const base = sanitizePathPart((item as ResolvedMediaItem & { outputFilename?: string }).outputFilename || item.title || 'TikTok video')
+  return `Sorevid/${folder}/${base}.mp4`
+}
+
+function sanitizePathPart(value: string) {
+  return value
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .replace(/^\.+|\.+$/g, '')
+    .trim()
+    .slice(0, 120) || 'TikTok'
 }
 
 export async function scanTikTokProfile(

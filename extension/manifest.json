@@ -5,7 +5,7 @@
   "description": "Send supported video pages from Chrome to Sorevid Downloader.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvhtF3KGOUdzA9aqaoCmS8xxQLIovNMtuF/jQi4nrV3NSi0l5hmFS06rgQufv9Nk1p9Q5ZMHhVBUJF36q5m+reDcYmUwf+trnrSqDaYoMFKPUYwnFNE0Vv7RG0aMXDMVrQDT0viSed2HIS9tPLAppukfbxyh8scYM1k7QP8YzcIBx1JSfKJ4vr5HCfAI5Mi5MHD9IYNQMLstsQZGNBNf6yXXlI1rKFC43FH8aSFl9s3drEwZ2ujuMyDIg95aL3LWxsfJ3RaN/2nO14tfYkGZwPaTcK5nieAWAH1jeKZ/gkX9GN/B8slrcn9W2hatV9Jli3H2wpLfKLU6jcqkDBSc+twIDAQAB",
   "minimum_chrome_version": "100",
-  "permissions": ["nativeMessaging", "activeTab", "contextMenus", "scripting", "cookies"],
+  "permissions": ["nativeMessaging", "activeTab", "contextMenus", "scripting", "cookies", "downloads", "alarms"],
   "host_permissions": [
     "https://*.bilibili.com/*",
     "https://b23.tv/*",

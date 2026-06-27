@@ -26,9 +26,10 @@ type ResolvedMediaItem = {
 }
 
 type ScanProfileMessage = {
-  type: 'scan-tiktok-profile'
+  type: 'scan-tiktok-profile' | 'resolve-tiktok-urls'
   limit?: number
   mode?: TikTokScanMode
+  urls?: string[]
 }
 
 type TikTokScanMode = 'fast' | 'safe' | 'slow'
@@ -52,6 +53,19 @@ window.addEventListener('hashchange', scheduleScan)
 setInterval(scanPlayers, 3000)
 
 chrome.runtime.onMessage.addListener((message: ScanProfileMessage, _sender, sendResponse) => {
+  if (message?.type === 'resolve-tiktok-urls') {
+    resolveTikTokUrls(message.urls || [], message.mode)
+      .then((items) => sendResponse({ ok: true, items }))
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+          items: [],
+        })
+      })
+    return true
+  }
+
   if (message?.type !== 'scan-tiktok-profile') return false
 
   scanTikTokProfile(message.limit, message.mode)
@@ -66,6 +80,18 @@ chrome.runtime.onMessage.addListener((message: ScanProfileMessage, _sender, send
 
   return true
 })
+
+async function resolveTikTokUrls(urls: string[], mode: TikTokScanMode = 'safe') {
+  const timing = scanTiming(mode)
+  const resolved: ResolvedMediaItem[] = []
+  for (const [index, url] of urls.entries()) {
+    resolved.push(await resolveTikTokVideo(url, false))
+    if (index < urls.length - 1) {
+      await wait(randomBetween(...timing.resolveDelay))
+    }
+  }
+  return resolved
+}
 
 function scheduleScan() {
   window.clearTimeout(scanTimer)

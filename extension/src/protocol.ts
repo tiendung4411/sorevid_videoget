@@ -24,10 +24,14 @@ export type ResolvedMediaItem = {
   subtitles?: ResolvedSubtitle[]
   isPinned?: boolean
   cookieHeader?: string
+  outputFolder?: string
+  outputFilename?: string
 }
 
 export type NativeRequest =
   | { version: 1; id: string; action: 'ping' }
+  | { version: 1; id: string; action: 'drain_browser_downloads' }
+  | { version: 1; id: string; action: 'drain_rescan_items' }
   | {
       version: 1
       id: string
@@ -65,6 +69,8 @@ export type NativeResponse = {
     | 'unsupported_url'
   message: string
   acceptedUrls?: string[]
+  browserDownloads?: ResolvedMediaItem[]
+  rescanItems?: ResolvedMediaItem[]
 }
 
 export function platformForUrl(url: string): Platform {

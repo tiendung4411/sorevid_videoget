@@ -37,6 +37,8 @@ const TIKTOK_MOBILE_USER_AGENT: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 
 struct ExtensionState {
     pending_urls: Arc<StdMutex<Vec<String>>>,
     pending_resolved_media: Arc<StdMutex<Vec<ResolvedMediaItem>>>,
+    pending_browser_downloads: Arc<StdMutex<Vec<ResolvedMediaItem>>>,
+    pending_rescan_items: Arc<StdMutex<Vec<ResolvedMediaItem>>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -71,6 +73,10 @@ struct NativeResponse {
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     accepted_urls: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    browser_downloads: Option<Vec<ResolvedMediaItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rescan_items: Option<Vec<ResolvedMediaItem>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -151,6 +157,12 @@ struct DownloadRequest {
 struct DirectDownloadRequest {
     items: Vec<ResolvedMediaItem>,
     download_dir: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RescanRequest {
+    items: Vec<ResolvedMediaItem>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -565,7 +577,7 @@ fn validate_native_request(request: &NativeRequest) -> Result<(), String> {
     }
     if !matches!(
         request.action.as_str(),
-        "ping" | "import_urls" | "import_resolved_media"
+        "ping" | "import_urls" | "import_resolved_media" | "drain_browser_downloads" | "drain_rescan_items"
     ) {
         return Err("Unsupported native action.".to_string());
     }
@@ -691,6 +703,54 @@ fn process_gui_request(
     focus_main_window(app);
     if request.action == "ping" {
         return response_ok(request.id, "Sorevid is connected.", None);
+    }
+
+    if request.action == "drain_browser_downloads" {
+        let items = extension_state
+            .pending_browser_downloads
+            .lock()
+            .map(|mut values| std::mem::take(&mut *values))
+            .unwrap_or_default();
+        return NativeResponse {
+            version: 1,
+            id: request.id,
+            ok: true,
+            code: "ok".to_string(),
+            message: if items.is_empty() {
+                "No browser fallback downloads pending.".to_string()
+            } else {
+                format!(
+                    "{} browser fallback download{} pending.",
+                    items.len(),
+                    if items.len() == 1 { "" } else { "s" }
+                )
+            },
+            accepted_urls: None,
+            browser_downloads: Some(items),
+            rescan_items: None,
+        };
+    }
+
+    if request.action == "drain_rescan_items" {
+        let items = extension_state
+            .pending_rescan_items
+            .lock()
+            .map(|mut values| std::mem::take(&mut *values))
+            .unwrap_or_default();
+        return NativeResponse {
+            version: 1,
+            id: request.id,
+            ok: true,
+            code: "ok".to_string(),
+            message: if items.is_empty() {
+                "No TikTok re-scan items pending.".to_string()
+            } else {
+                format!("{} TikTok item{} pending re-scan.", items.len(), if items.len() == 1 { "" } else { "s" })
+            },
+            accepted_urls: None,
+            browser_downloads: None,
+            rescan_items: Some(items),
+        };
     }
 
     if request.action == "import_resolved_media" {
@@ -827,6 +887,8 @@ fn response_ok(id: String, message: &str, accepted_urls: Option<Vec<String>>) ->
         code: "ok".to_string(),
         message: message.to_string(),
         accepted_urls,
+        browser_downloads: None,
+        rescan_items: None,
     }
 }
 
@@ -838,6 +900,8 @@ fn response_error(id: String, code: &str, message: &str) -> NativeResponse {
         code: code.to_string(),
         message: message.to_string(),
         accepted_urls: None,
+        browser_downloads: None,
+        rescan_items: None,
     }
 }
 
@@ -896,6 +960,26 @@ fn drain_extension_imports(state: State<'_, ExtensionState>) -> ExtensionImportP
         urls,
         resolved_media,
     }
+}
+
+#[tauri::command]
+fn queue_tiktok_rescan(
+    state: State<'_, ExtensionState>,
+    request: RescanRequest,
+) -> Result<String, String> {
+    if request.items.is_empty() {
+        return Err("Select at least one TikTok item to re-scan.".to_string());
+    }
+    let count = request.items.len();
+    state
+        .pending_rescan_items
+        .lock()
+        .map_err(|_| "Could not queue TikTok re-scan items.".to_string())?
+        .extend(request.items);
+    Ok(format!(
+        "Queued {count} TikTok item{} for Chrome re-scan.",
+        if count == 1 { "" } else { "s" }
+    ))
 }
 
 #[tauri::command]
@@ -1711,6 +1795,7 @@ async fn start_download(
 async fn start_direct_download(
     app: AppHandle,
     state: State<'_, DownloadState>,
+    extension_state: State<'_, ExtensionState>,
     request: DirectDownloadRequest,
 ) -> Result<String, String> {
     if request.items.is_empty() {
@@ -1743,6 +1828,7 @@ async fn start_direct_download(
 
     state.direct_jobs.lock().await.insert(job_id.clone());
     let state_handle = state.inner().clone();
+    let extension_state_handle = extension_state.inner().clone();
     let app_handle = app.clone();
     let wait_job_id = job_id.clone();
     tauri::async_runtime::spawn(async move {
@@ -1773,6 +1859,8 @@ async fn start_direct_download(
             }
         };
         let mut completed_paths = Vec::new();
+        let mut skipped_paths = Vec::new();
+        let mut fallback_count = 0usize;
 
         for (index, item) in request.items.iter().enumerate() {
             let was_canceled = state_handle.canceled.lock().await.contains(&wait_job_id);
@@ -1780,6 +1868,27 @@ async fn start_direct_download(
                 state_handle.canceled.lock().await.remove(&wait_job_id);
                 state_handle.direct_jobs.lock().await.remove(&wait_job_id);
                 return;
+            }
+
+            if let Some(existing_path) = existing_direct_media_output(&download_dir, item) {
+                skipped_paths.push(existing_path.clone());
+                emit_event(
+                    &app_handle,
+                    DownloadEvent {
+                        job_id: wait_job_id.clone(),
+                        status: "running".to_string(),
+                        percent: Some(((index + 1) as f32 / total_items as f32) * 100.0),
+                        speed: None,
+                        eta: None,
+                        line: Some(format!(
+                            "Skipped existing file: {}",
+                            existing_path.display()
+                        )),
+                        output_path: Some(existing_path.display().to_string()),
+                        media_report: None,
+                    },
+                );
+                continue;
             }
 
             emit_event(
@@ -1836,6 +1945,26 @@ async fn start_direct_download(
                     );
                 }
                 Err(error) => {
+                    if error.contains("HTTP 403") {
+                        fallback_count += 1;
+                        if let Ok(mut pending) = extension_state_handle.pending_browser_downloads.lock() {
+                            pending.push(item.clone());
+                        }
+                        emit_event(
+                            &app_handle,
+                            DownloadEvent {
+                                job_id: wait_job_id.clone(),
+                                status: "warning".to_string(),
+                                percent: Some(((index + 1) as f32 / total_items as f32) * 100.0),
+                                speed: None,
+                                eta: None,
+                                line: Some("Queued this item for Chrome browser fallback download.".to_string()),
+                                output_path: None,
+                                media_report: None,
+                            },
+                        );
+                        continue;
+                    }
                     state_handle.canceled.lock().await.remove(&wait_job_id);
                     state_handle.direct_jobs.lock().await.remove(&wait_job_id);
                     emit_event(
@@ -1858,7 +1987,7 @@ async fn start_direct_download(
 
         state_handle.canceled.lock().await.remove(&wait_job_id);
         state_handle.direct_jobs.lock().await.remove(&wait_job_id);
-        if completed_paths.is_empty() {
+        if completed_paths.is_empty() && skipped_paths.is_empty() && fallback_count == 0 {
             emit_event(
                 &app_handle,
                 DownloadEvent {
@@ -1873,6 +2002,7 @@ async fn start_direct_download(
                 },
             );
         } else {
+            let total_done = completed_paths.len() + skipped_paths.len() + fallback_count;
             emit_event(
                 &app_handle,
                 DownloadEvent {
@@ -1882,12 +2012,15 @@ async fn start_direct_download(
                     speed: None,
                     eta: None,
                     line: Some(format!(
-                        "Direct media download completed for {} item{}.",
-                        completed_paths.len(),
-                        if completed_paths.len() == 1 { "" } else { "s" }
+                        "Direct media download completed for {} item{} ({} skipped, {} sent to Chrome fallback).",
+                        total_done,
+                        if total_done == 1 { "" } else { "s" },
+                        skipped_paths.len(),
+                        fallback_count
                     )),
                     output_path: completed_paths
                         .last()
+                        .or_else(|| skipped_paths.last())
                         .map(|path| path.display().to_string()),
                     media_report: None,
                 },
@@ -2000,20 +2133,10 @@ async fn download_direct_media_item(
             .and_then(|value| value.to_str().ok()),
         &item.media_url,
     );
-    let output_dir = item
-        .output_folder
-        .as_deref()
-        .map(|folder| scoped_output_dir(download_dir, folder))
-        .unwrap_or_else(|| download_dir.to_path_buf());
+    let output_dir = direct_output_dir(download_dir, item);
     fs::create_dir_all(&output_dir)
         .map_err(|error| format!("Failed to create output folder: {error}"))?;
-    let output_stem = item
-        .output_filename
-        .as_deref()
-        .or(item.title.as_deref())
-        .or(item.uploader.as_deref())
-        .unwrap_or("tiktok");
-    let filename = unique_media_filename(&output_dir, &sanitize_filename(output_stem), &extension);
+    let filename = unique_media_filename(&output_dir, &direct_output_stem(item), &extension);
 
     let mut file = fs::File::create(&filename)
         .map_err(|error| format!("Failed to create output file: {error}"))?;
@@ -3429,6 +3552,34 @@ fn scoped_output_dir(base: &Path, folder: &str) -> PathBuf {
     path
 }
 
+fn direct_output_dir(base: &Path, item: &ResolvedMediaItem) -> PathBuf {
+    item.output_folder
+        .as_deref()
+        .map(|folder| scoped_output_dir(base, folder))
+        .unwrap_or_else(|| base.to_path_buf())
+}
+
+fn direct_output_stem(item: &ResolvedMediaItem) -> String {
+    sanitize_filename(
+        item.output_filename
+            .as_deref()
+            .or(item.title.as_deref())
+            .or(item.uploader.as_deref())
+            .unwrap_or("tiktok"),
+    )
+}
+
+fn existing_direct_media_output(base: &Path, item: &ResolvedMediaItem) -> Option<PathBuf> {
+    let dir = direct_output_dir(base, item);
+    let stem = direct_output_stem(item);
+    const EXTENSIONS: [&str; 7] = ["mp4", "m4v", "mov", "webm", "mkv", "mp3", "m4a"];
+
+    EXTENSIONS
+        .iter()
+        .map(|extension| dir.join(format!("{stem}.{extension}")))
+        .find(|path| path.is_file())
+}
+
 fn unique_filename(dir: &Path, stem: &str, extension: &str) -> PathBuf {
     let mut candidate = dir.join(format!("{stem} cover.{extension}"));
     let mut index = 2;
@@ -3483,6 +3634,7 @@ pub fn run() {
             load_settings,
             save_settings,
             drain_extension_imports,
+            queue_tiktok_rescan,
             organize_batch_with_ai,
             get_chrome_integration_status,
             install_chrome_integration,
