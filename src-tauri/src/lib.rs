@@ -188,6 +188,8 @@ struct AppSettings {
     embed_subtitles: bool,
     #[serde(default = "default_danmaku_format")]
     danmaku_format: String,
+    #[serde(default = "default_batch_file_name_mode")]
+    batch_file_name_mode: String,
     #[serde(default)]
     cookie_profiles: HashMap<String, CookieProfileSettings>,
     #[serde(default)]
@@ -297,6 +299,8 @@ struct DownloadEvent {
     percent: Option<f32>,
     speed: Option<String>,
     eta: Option<String>,
+    current_item: Option<u32>,
+    total_items: Option<u32>,
     line: Option<String>,
     output_path: Option<String>,
     media_report: Option<MediaReport>,
@@ -1812,6 +1816,8 @@ async fn start_download(
             percent: None,
             speed: None,
             eta: None,
+            current_item: None,
+            total_items: None,
             line: Some(format!(
                 "Starting download for {} item{}.",
                 request.urls.len(),
@@ -1889,6 +1895,8 @@ async fn start_download(
                             percent: Some(100.0),
                             speed: None,
                             eta: None,
+                            current_item: None,
+                            total_items: None,
                             line: Some("Download completed.".to_string()),
                             output_path: None,
                             media_report: None,
@@ -1911,6 +1919,8 @@ async fn start_download(
                                     percent: None,
                                     speed: None,
                                     eta: None,
+                                    current_item: None,
+                                    total_items: None,
                                     line: Some(message),
                                     output_path: None,
                                     media_report: None,
@@ -1930,6 +1940,8 @@ async fn start_download(
                                 percent: Some(100.0),
                                 speed: None,
                                 eta: None,
+                                current_item: None,
+                                total_items: None,
                                 line: Some(match &report {
                                     Some(report) => media_report_message(report),
                                     None => "Download completed.".to_string(),
@@ -1949,6 +1961,8 @@ async fn start_download(
                     percent: None,
                     speed: None,
                     eta: None,
+                    current_item: None,
+                    total_items: None,
                     line: Some(format!(
                         "yt-dlp exited with code {}. If Chrome cookies failed, open Chrome, sign in to the site, then try again or import cookies.txt.",
                         exit.code().map_or("unknown".to_string(), |code| code.to_string())
@@ -1965,6 +1979,8 @@ async fn start_download(
                     percent: None,
                     speed: None,
                     eta: None,
+                    current_item: None,
+                    total_items: None,
                     line: Some(format!("Failed while waiting for yt-dlp: {error}")),
                     output_path: None,
                     media_report: None,
@@ -2001,6 +2017,8 @@ async fn start_direct_download(
             percent: None,
             speed: None,
             eta: None,
+            current_item: None,
+            total_items: None,
             line: Some(format!(
                 "Direct media download queued for {} item{}.",
                 request.items.len(),
@@ -2035,6 +2053,8 @@ async fn start_direct_download(
                         percent: None,
                         speed: None,
                         eta: None,
+                        current_item: None,
+                        total_items: None,
                         line: Some(format!("Failed to prepare direct downloader: {error}")),
                         output_path: None,
                         media_report: None,
@@ -2065,6 +2085,8 @@ async fn start_direct_download(
                         percent: Some(((index + 1) as f32 / total_items as f32) * 100.0),
                         speed: None,
                         eta: None,
+                        current_item: None,
+                        total_items: None,
                         line: Some(format!(
                             "Skipped existing file: {}",
                             existing_path.display()
@@ -2084,6 +2106,8 @@ async fn start_direct_download(
                     percent: Some((index as f32 / total_items as f32) * 100.0),
                     speed: None,
                     eta: None,
+                    current_item: None,
+                    total_items: None,
                     line: Some(format!(
                         "[direct] Downloading item {} of {}: {}",
                         index + 1,
@@ -2120,6 +2144,8 @@ async fn start_direct_download(
                             percent: Some(((index + 1) as f32 / total_items as f32) * 100.0),
                             speed: None,
                             eta: None,
+                            current_item: None,
+                            total_items: None,
                             line: Some(match &report {
                                 Some(report) => media_report_message(report),
                                 None => format!("Saved file: {}", path.display()),
@@ -2143,6 +2169,8 @@ async fn start_direct_download(
                                 percent: Some(((index + 1) as f32 / total_items as f32) * 100.0),
                                 speed: None,
                                 eta: None,
+                                current_item: None,
+                                total_items: None,
                                 line: Some("Queued this item for Chrome browser fallback download.".to_string()),
                                 output_path: None,
                                 media_report: None,
@@ -2160,6 +2188,8 @@ async fn start_direct_download(
                             percent: None,
                             speed: None,
                             eta: None,
+                            current_item: None,
+                            total_items: None,
                             line: Some(error),
                             output_path: None,
                             media_report: None,
@@ -2181,6 +2211,8 @@ async fn start_direct_download(
                     percent: None,
                     speed: None,
                     eta: None,
+                    current_item: None,
+                    total_items: None,
                     line: Some("No direct media files were downloaded.".to_string()),
                     output_path: None,
                     media_report: None,
@@ -2196,6 +2228,8 @@ async fn start_direct_download(
                     percent: Some(100.0),
                     speed: None,
                     eta: None,
+                    current_item: None,
+                    total_items: None,
                     line: Some(format!(
                         "Direct media download completed for {} item{} ({} skipped, {} sent to Chrome fallback).",
                         total_done,
@@ -2236,6 +2270,8 @@ async fn cancel_download(
                     percent: None,
                     speed: None,
                     eta: None,
+                    current_item: None,
+                    total_items: None,
                     line: Some("Download canceled.".to_string()),
                     output_path: None,
                     media_report: None,
@@ -2258,6 +2294,8 @@ async fn cancel_download(
             percent: None,
             speed: None,
             eta: None,
+            current_item: None,
+            total_items: None,
             line: Some("Download canceled.".to_string()),
             output_path: None,
             media_report: None,
@@ -2274,6 +2312,18 @@ async fn download_direct_media_item(
     job_id: &str,
     app: &AppHandle,
 ) -> Result<PathBuf, String> {
+    let output_dir = direct_output_dir(download_dir, item);
+    fs::create_dir_all(&output_dir)
+        .map_err(|error| format!("Failed to create output folder: {error}"))?;
+
+    let partial_resume_path = existing_direct_partial_output(&output_dir, item);
+    let resume_from = partial_resume_path
+        .as_ref()
+        .and_then(|path| fs::metadata(path).ok())
+        .map(|metadata| metadata.len())
+        .filter(|size| *size > 0)
+        .unwrap_or(0);
+
     let mut request = client
         .get(&item.media_url)
         .header(
@@ -2282,9 +2332,15 @@ async fn download_direct_media_item(
         )
         .header(reqwest::header::ACCEPT, "*/*")
         .header(reqwest::header::ACCEPT_LANGUAGE, "en-US,en;q=0.9")
-        .header(reqwest::header::REFERER, &item.page_url)
-        .header(reqwest::header::RANGE, "bytes=0-");
-    if let Some(cookie_header) = item.cookie_header.as_deref().filter(|value| !value.trim().is_empty()) {
+        .header(reqwest::header::REFERER, &item.page_url);
+    if resume_from > 0 {
+        request = request.header(reqwest::header::RANGE, format!("bytes={resume_from}-"));
+    }
+    if let Some(cookie_header) = item
+        .cookie_header
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
         request = request.header(reqwest::header::COOKIE, cookie_header);
     }
     let response = request
@@ -2318,15 +2374,49 @@ async fn download_direct_media_item(
             .and_then(|value| value.to_str().ok()),
         &item.media_url,
     );
-    let output_dir = direct_output_dir(download_dir, item);
-    fs::create_dir_all(&output_dir)
-        .map_err(|error| format!("Failed to create output folder: {error}"))?;
-    let filename = unique_media_filename(&output_dir, &direct_output_stem(item), &extension);
+    let status = response.status();
+    let (filename, partial_path) = match partial_resume_path {
+        Some(partial_path) => (final_path_for_partial(&partial_path), partial_path),
+        None => {
+            let filename =
+                unique_direct_media_filename(&output_dir, &direct_output_stem(item), &extension);
+            let partial_path = partial_output_path(&filename);
+            (filename, partial_path)
+        }
+    };
+    let should_append = resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT;
+    let starting_bytes = if should_append { resume_from } else { 0 };
+    if resume_from > 0 && !should_append {
+        emit_event(
+            app,
+            DownloadEvent {
+                job_id: job_id.to_string(),
+                status: "running".to_string(),
+                percent: None,
+                speed: None,
+                eta: None,
+                current_item: None,
+                total_items: None,
+                line: Some(
+                    "[direct] Server did not accept resume; restarting partial file.".to_string(),
+                ),
+                output_path: Some(filename.display().to_string()),
+                media_report: None,
+            },
+        );
+    }
 
-    let mut file = fs::File::create(&filename)
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(should_append)
+        .truncate(!should_append)
+        .open(&partial_path)
         .map_err(|error| format!("Failed to create output file: {error}"))?;
-    let mut downloaded_bytes = 0u64;
-    let total_bytes = response.content_length();
+    let mut downloaded_bytes = starting_bytes;
+    let total_bytes = response
+        .content_length()
+        .map(|length| length.saturating_add(starting_bytes));
     let mut response = response;
 
     while let Some(chunk) = response
@@ -2347,6 +2437,8 @@ async fn download_direct_media_item(
                 percent,
                 speed: None,
                 eta: None,
+                current_item: None,
+                total_items: None,
                 line: Some(format!(
                     "[direct] Saved {} / {}",
                     format_bytes(downloaded_bytes),
@@ -2354,13 +2446,156 @@ async fn download_direct_media_item(
                         .map(format_bytes)
                         .unwrap_or_else(|| "unknown".to_string())
                 )),
-                output_path: Some(filename.display().to_string()),
+                output_path: Some(partial_path.display().to_string()),
                 media_report: None,
             },
         );
     }
 
+    drop(file);
+    fs::rename(&partial_path, &filename)
+        .map_err(|error| format!("Failed to finalize direct media file: {error}"))?;
+    let subtitle_paths = download_direct_subtitles(client, item, &filename, app, job_id).await;
+    write_direct_metadata_sidecar(item, &filename, &subtitle_paths)?;
+
     Ok(filename)
+}
+
+async fn download_direct_subtitles(
+    client: &reqwest::Client,
+    item: &ResolvedMediaItem,
+    media_path: &Path,
+    app: &AppHandle,
+    job_id: &str,
+) -> Vec<PathBuf> {
+    let mut saved_paths = Vec::new();
+    for subtitle in &item.subtitles {
+        match download_direct_subtitle(client, item, subtitle, media_path).await {
+            Ok(Some(path)) => {
+                saved_paths.push(path.clone());
+                emit_event(
+                    app,
+                    DownloadEvent {
+                        job_id: job_id.to_string(),
+                        status: "running".to_string(),
+                        percent: None,
+                        speed: None,
+                        eta: None,
+                        current_item: None,
+                        total_items: None,
+                        line: Some(format!("[direct] Saved subtitle: {}", path.display())),
+                        output_path: Some(path.display().to_string()),
+                        media_report: None,
+                    },
+                );
+            }
+            Ok(None) => {}
+            Err(error) => emit_event(
+                app,
+                DownloadEvent {
+                    job_id: job_id.to_string(),
+                    status: "warning".to_string(),
+                    percent: None,
+                    speed: None,
+                    eta: None,
+                    current_item: None,
+                    total_items: None,
+                    line: Some(error),
+                    output_path: Some(media_path.display().to_string()),
+                    media_report: None,
+                },
+            ),
+        }
+    }
+    saved_paths
+}
+
+async fn download_direct_subtitle(
+    client: &reqwest::Client,
+    item: &ResolvedMediaItem,
+    subtitle: &ResolvedSubtitle,
+    media_path: &Path,
+) -> Result<Option<PathBuf>, String> {
+    if subtitle.url.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let subtitle_path = subtitle_output_path(media_path, subtitle);
+    if subtitle_path.is_file() {
+        return Ok(Some(subtitle_path));
+    }
+
+    let mut request = client
+        .get(&subtitle.url)
+        .header(
+            reqwest::header::USER_AGENT,
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+        )
+        .header(reqwest::header::ACCEPT, "text/vtt,text/plain,*/*")
+        .header(reqwest::header::ACCEPT_LANGUAGE, "en-US,en;q=0.9")
+        .header(reqwest::header::REFERER, &item.page_url);
+    if let Some(cookie_header) = item
+        .cookie_header
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        request = request.header(reqwest::header::COOKIE, cookie_header);
+    }
+
+    let response = request
+        .send()
+        .await
+        .map_err(|error| format!("Failed to request subtitle URL: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Subtitle URL returned HTTP {} for {}.",
+            response.status(),
+            subtitle.url
+        ));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Failed while reading subtitle response: {error}"))?;
+    fs::write(&subtitle_path, bytes)
+        .map_err(|error| format!("Failed to write subtitle sidecar: {error}"))?;
+
+    Ok(Some(subtitle_path))
+}
+
+fn write_direct_metadata_sidecar(
+    item: &ResolvedMediaItem,
+    media_path: &Path,
+    subtitle_paths: &[PathBuf],
+) -> Result<(), String> {
+    let sidecar_path = metadata_sidecar_path(media_path);
+    let payload = serde_json::json!({
+        "sourceUrl": item.source_url.clone(),
+        "pageUrl": item.page_url.clone(),
+        "mediaUrl": item.media_url.clone(),
+        "dramaId": item.drama_id.clone(),
+        "seriesName": item.series_name.clone(),
+        "episodeNumber": item.episode_number,
+        "title": item.title.clone(),
+        "uploader": item.uploader.clone(),
+        "duration": item.duration,
+        "thumbnail": item.thumbnail.clone(),
+        "videoCodec": item.video_codec.clone(),
+        "audioCodec": item.audio_codec.clone(),
+        "width": item.width,
+        "height": item.height,
+        "subtitles": item.subtitles.clone(),
+        "outputPath": media_path.display().to_string(),
+        "subtitlePaths": subtitle_paths
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>(),
+    });
+    let text = serde_json::to_string_pretty(&payload)
+        .map_err(|error| format!("Failed to serialize metadata sidecar: {error}"))?;
+    fs::write(&sidecar_path, text)
+        .map_err(|error| format!("Failed to write metadata sidecar: {error}"))
 }
 
 async fn kill_process(pid: u32) -> Result<(), String> {
@@ -2796,6 +3031,8 @@ fn spawn_line_reader<R>(
                         percent: None,
                         speed: None,
                         eta: None,
+                        current_item: None,
+                        total_items: None,
                         line: Some(format!("Saved file: {}", path.display())),
                         output_path: Some(path.display().to_string()),
                         media_report: None,
@@ -2810,6 +3047,8 @@ fn spawn_line_reader<R>(
                 percent: None,
                 speed: None,
                 eta: None,
+                current_item: None,
+                total_items: None,
                 line: Some(if is_error {
                     friendly_error(&line)
                 } else {
@@ -2825,21 +3064,44 @@ fn spawn_line_reader<R>(
 }
 
 fn parse_progress_line(job_id: &str, line: &str) -> Option<DownloadEvent> {
-    let payload = line.strip_prefix("download:")?;
-    let mut parts = payload.split('|');
-    let percent = parts
-        .next()
-        .and_then(|value| value.trim().trim_end_matches('%').parse::<f32>().ok());
-    let speed = parts
-        .next()
-        .map(str::trim)
-        .filter(|value| !value.is_empty() && *value != "N/A")
-        .map(ToString::to_string);
-    let eta = parts
-        .next()
-        .map(str::trim)
-        .filter(|value| !value.is_empty() && *value != "N/A")
-        .map(ToString::to_string);
+    let batch_progress = line
+        .strip_prefix("[download] Downloading item ")
+        .and_then(|value| {
+            let (current, total) = value.split_once(" of ")?;
+            let total = total.trim();
+            if !total.chars().all(|ch| ch.is_ascii_digit()) {
+                return None;
+            }
+            Some((current.trim().parse::<u32>().ok()?, total.parse::<u32>().ok()?))
+        });
+
+    let (percent, speed, eta) = if let Some(payload) = line.strip_prefix("download:") {
+        let mut parts = payload.split('|');
+        let percent = parts
+            .next()
+            .and_then(|value| value.trim().trim_end_matches('%').parse::<f32>().ok());
+        let speed = parts
+            .next()
+            .map(str::trim)
+            .filter(|value| !value.is_empty() && *value != "N/A")
+            .map(ToString::to_string);
+        let eta = parts
+            .next()
+            .map(str::trim)
+            .filter(|value| !value.is_empty() && *value != "N/A")
+            .map(ToString::to_string);
+        (percent, speed, eta)
+    } else {
+        (None, None, None)
+    };
+
+    if percent.is_none() && speed.is_none() && eta.is_none() && batch_progress.is_none() {
+        return None;
+    }
+
+    let (current_item, total_items) = batch_progress
+        .map(|(current_item, total_items)| (Some(current_item), Some(total_items)))
+        .unwrap_or((None, None));
 
     Some(DownloadEvent {
         job_id: job_id.to_string(),
@@ -2847,6 +3109,8 @@ fn parse_progress_line(job_id: &str, line: &str) -> Option<DownloadEvent> {
         percent,
         speed,
         eta,
+        current_item,
+        total_items,
         line: Some(line.to_string()),
         output_path: None,
         media_report: None,
@@ -3217,6 +3481,7 @@ fn default_settings() -> AppSettings {
         subtitle_format: default_subtitle_format(),
         embed_subtitles: false,
         danmaku_format: default_danmaku_format(),
+        batch_file_name_mode: default_batch_file_name_mode(),
         cookie_profiles: HashMap::new(),
         gemini_api_key: String::new(),
         gemini_model: default_gemini_model(),
@@ -3237,6 +3502,10 @@ fn default_subtitle_format() -> String {
 
 fn default_danmaku_format() -> String {
     "none".to_string()
+}
+
+fn default_batch_file_name_mode() -> String {
+    "episodeOnly".to_string()
 }
 
 fn default_gemini_model() -> String {
@@ -3770,6 +4039,27 @@ fn existing_direct_media_output(base: &Path, item: &ResolvedMediaItem) -> Option
         .find(|path| path.is_file())
 }
 
+fn existing_direct_partial_output(dir: &Path, item: &ResolvedMediaItem) -> Option<PathBuf> {
+    let stem = direct_output_stem(item);
+    let inferred_extension = media_extension(None, &item.media_url);
+    let mut extensions = vec![
+        inferred_extension.as_str(),
+        "mp4",
+        "m4v",
+        "mov",
+        "webm",
+        "mkv",
+        "mp3",
+        "m4a",
+    ];
+    extensions.dedup();
+
+    extensions
+        .into_iter()
+        .map(|extension| dir.join(format!("{stem}.{extension}.part")))
+        .find(|path| path.is_file())
+}
+
 fn unique_filename(dir: &Path, stem: &str, extension: &str) -> PathBuf {
     let mut candidate = dir.join(format!("{stem} cover.{extension}"));
     let mut index = 2;
@@ -3780,14 +4070,89 @@ fn unique_filename(dir: &Path, stem: &str, extension: &str) -> PathBuf {
     candidate
 }
 
-fn unique_media_filename(dir: &Path, stem: &str, extension: &str) -> PathBuf {
+fn unique_direct_media_filename(dir: &Path, stem: &str, extension: &str) -> PathBuf {
     let mut candidate = dir.join(format!("{stem}.{extension}"));
     let mut index = 2;
-    while candidate.exists() {
+    while candidate.exists() || partial_output_path(&candidate).exists() {
         candidate = dir.join(format!("{stem} {index}.{extension}"));
         index += 1;
     }
     candidate
+}
+
+fn partial_output_path(path: &Path) -> PathBuf {
+    let mut file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("download")
+        .to_string();
+    file_name.push_str(".part");
+    path.with_file_name(file_name)
+}
+
+fn final_path_for_partial(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .and_then(|value| value.strip_suffix(".part"))
+        .unwrap_or("download.mp4");
+    path.with_file_name(file_name)
+}
+
+fn subtitle_output_path(media_path: &Path, subtitle: &ResolvedSubtitle) -> PathBuf {
+    let media_stem = media_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("subtitle");
+    let language = subtitle
+        .language
+        .as_deref()
+        .map(sanitize_filename)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "und".to_string());
+    let extension = subtitle_extension(subtitle);
+
+    media_path.with_file_name(format!("{media_stem}.{language}.{extension}"))
+}
+
+fn subtitle_extension(subtitle: &ResolvedSubtitle) -> String {
+    if let Some(format) = subtitle.format.as_deref() {
+        let clean = format
+            .trim()
+            .trim_start_matches('.')
+            .split('/')
+            .next()
+            .unwrap_or(format)
+            .to_ascii_lowercase();
+        if matches!(
+            clean.as_str(),
+            "srt" | "vtt" | "ass" | "ssa" | "json" | "ttml"
+        ) {
+            return clean;
+        }
+    }
+
+    let clean_url = subtitle
+        .url
+        .split('?')
+        .next()
+        .unwrap_or(&subtitle.url)
+        .to_ascii_lowercase();
+    for extension in ["srt", "vtt", "ass", "ssa", "json", "ttml"] {
+        if clean_url.ends_with(&format!(".{extension}")) {
+            return extension.to_string();
+        }
+    }
+
+    "vtt".to_string()
+}
+
+fn metadata_sidecar_path(media_path: &Path) -> PathBuf {
+    let media_stem = media_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("metadata");
+    media_path.with_file_name(format!("{media_stem}.info.json"))
 }
 
 fn format_bytes(value: u64) -> String {
@@ -3861,6 +4226,34 @@ mod tests {
             subtitle_format: SubtitleFormat::Srt,
             embed_subtitles: false,
             danmaku_format: DanmakuFormat::None,
+        }
+    }
+
+    fn direct_item() -> ResolvedMediaItem {
+        ResolvedMediaItem {
+            source_url: "https://www.tiktok.com/@creator/video/1".to_string(),
+            page_url: "https://www.tiktok.com/@creator/video/1".to_string(),
+            media_url: "https://cdn.example.test/video.mp4?token=abc".to_string(),
+            drama_id: Some("drama-1".to_string()),
+            series_name: Some("Series".to_string()),
+            episode_number: Some(7),
+            title: Some("Episode 7".to_string()),
+            uploader: Some("creator".to_string()),
+            duration: Some(12.5),
+            thumbnail: Some("https://cdn.example.test/thumb.jpg".to_string()),
+            video_codec: Some("h264".to_string()),
+            audio_codec: Some("aac".to_string()),
+            width: Some(1080),
+            height: Some(1920),
+            subtitles: vec![ResolvedSubtitle {
+                format: Some("vtt".to_string()),
+                language: Some("vi/VN".to_string()),
+                url: "https://cdn.example.test/subtitle.vtt".to_string(),
+            }],
+            output_folder: Some("Series/Part 1".to_string()),
+            output_filename: Some("Episode 7".to_string()),
+            is_pinned: false,
+            cookie_header: None,
         }
     }
 
@@ -4059,6 +4452,53 @@ mod tests {
             hint.possible_collection_ids,
             vec!["7371330159376370462".to_string()]
         );
+    }
+
+    #[test]
+    fn direct_resume_partial_paths_are_stable() {
+        let final_path = PathBuf::from("/tmp/Episode 7.mp4");
+        let partial_path = partial_output_path(&final_path);
+
+        assert_eq!(partial_path, PathBuf::from("/tmp/Episode 7.mp4.part"));
+        assert_eq!(final_path_for_partial(&partial_path), final_path);
+    }
+
+    #[test]
+    fn direct_sidecar_paths_use_media_stem() {
+        let subtitle = ResolvedSubtitle {
+            format: Some("srt/best".to_string()),
+            language: Some("vi/VN".to_string()),
+            url: "https://cdn.example.test/caption".to_string(),
+        };
+        let media_path = PathBuf::from("/tmp/Episode 7.mp4");
+
+        assert_eq!(
+            subtitle_output_path(&media_path, &subtitle),
+            PathBuf::from("/tmp/Episode 7.vi_VN.srt")
+        );
+        assert_eq!(
+            metadata_sidecar_path(&media_path),
+            PathBuf::from("/tmp/Episode 7.info.json")
+        );
+    }
+
+    #[test]
+    fn direct_partial_lookup_matches_output_filename() {
+        let root = std::env::temp_dir().join(format!("sorevid-test-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join("Series").join("Part 1")).expect("temp dir should create");
+        let item = direct_item();
+        let partial_path = root
+            .join("Series")
+            .join("Part 1")
+            .join("Episode 7.mp4.part");
+        fs::write(&partial_path, b"partial").expect("partial should write");
+
+        assert_eq!(
+            existing_direct_partial_output(&direct_output_dir(&root, &item), &item),
+            Some(partial_path)
+        );
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

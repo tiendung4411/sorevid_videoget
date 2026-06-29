@@ -362,8 +362,57 @@ async function scanTikTokShortDrama(limit?: number, mode: TikTokScanMode = 'safe
   return scanLimit ? results.slice(0, scanLimit) : results
 }
 
+async function waitForCaptureEntry(
+  matchSubstring: string,
+  timeoutMs = 12000,
+): Promise<{ url: string; payload: any }> {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeoutMs) {
+    for (const [url, payload] of dramaCaptureBuffer.entries()) {
+      if (url.includes(matchSubstring)) {
+        dramaCaptureBuffer.delete(url)
+        return { url, payload }
+      }
+    }
+    await wait(200)
+  }
+  throw new Error('Timed out waiting for ' + matchSubstring)
+}
+
+function firstItemDramaId(payload: any): string {
+  const list = Array.isArray(payload?.itemList) ? payload.itemList : []
+  for (const item of list) {
+    const id = item?.dramaInfo?.dramaID
+    if (id) {
+      return String(id)
+    }
+  }
+  return ''
+}
+
+function ingestEpisodePayload(
+  payload: any,
+  dramaId: string,
+  target: Map<string, ResolvedMediaItem>,
+): void {
+  const list = Array.isArray(payload?.itemList) ? payload.itemList : []
+  for (const item of list) {
+    if (dramaId && String(item?.dramaInfo?.dramaID || '') !== dramaId) {
+      continue
+    }
+    const mapped = mapDramaEpisodeToResolved(item)
+    if (!mapped.mediaUrl) {
+      console.warn('[sorevid] episode missing media URL', mapped.episodeNumber, item?.id)
+    }
+    const key = mapped.episodeNumber != null ? 'ep:' + mapped.episodeNumber : 'id:' + (item?.id || mapped.pageUrl)
+    if (!target.has(key)) {
+      target.set(key, mapped)
+    }
+  }
+}
+
 async function scanTikTokSeriesFromVideo(
-  limit?: number,
+  _limit?: number,
   mode: TikTokScanMode = 'safe',
 ): Promise<ResolvedMediaItem[]> {
   if (!/\/@[^/]+\/video\/\d+/.test(location.pathname)) {
@@ -371,95 +420,92 @@ async function scanTikTokSeriesFromVideo(
   }
 
   const timing = scanTiming(mode)
-  const scanLimit = typeof limit === 'number' && limit > 0 ? limit : undefined
-  const results: ResolvedMediaItem[] = []
   dramaCaptureBuffer.clear()
 
+  let segments: HTMLElement[] = []
   try {
-    await waitForSelector('[role=dialog][aria-label="Cinema mode"], section', 12000)
+    await waitForSelector('button[data-testid="tux-segment-item"]', 8000)
+    segments = Array.from(
+      document.querySelectorAll<HTMLElement>('button[data-testid="tux-segment-item"]'),
+    )
   } catch {
-    // Ignore missing player container and continue with API/capture lookup.
+    // No segment control: single-page drama or panel not open yet.
   }
 
-  let apiUrl = performance
-    .getEntriesByType('resource')
-    .map((resource) => (resource as PerformanceResourceTiming).name)
-    .reverse()
-    .find((url) => url.includes('/api/drama/episode/item_list/'))
-
-  if (!apiUrl) {
-    const segments = Array.from(document.querySelectorAll<HTMLElement>('button[data-testid="tux-segment-item"]'))
-    if (segments.length > 0) {
-      segments[0].click()
-      await wait(randomBetween(...timing.scrollDelay))
-      apiUrl = performance
-        .getEntriesByType('resource')
-        .map((resource) => (resource as PerformanceResourceTiming).name)
-        .reverse()
-        .find((url) => url.includes('/api/drama/episode/item_list/'))
+  let signed: { url: string; payload: any } | undefined
+  for (const segment of segments) {
+    segment.click()
+    try {
+      signed = await waitForCaptureEntry('/api/drama/episode/item_list/', 5000)
+      break
+    } catch {
+      // Segment likely already active; try the next one.
+    }
+  }
+  if (!signed) {
+    try {
+      signed = await waitForCaptureEntry('/api/drama/episode/item_list/', 6000)
+    } catch {
+      // No live network capture (drama panel already cached). Fall back to embedded page state below.
     }
   }
 
-  if (!apiUrl) {
-    const cap = await waitForCapture('/api/drama/episode/item_list/')
-    const itemList = Array.isArray(cap?.itemList) ? cap.itemList : []
-    for (const item of itemList) {
-      const resolvedItem = mapDramaEpisodeToResolved(item)
-      if (!resolvedItem.mediaUrl) {
-        console.warn('[sorevid] episode missing media URL', resolvedItem.episodeNumber, item?.id, item?.desc)
-      }
-      results.push(resolvedItem)
-      if (scanLimit && results.length >= scanLimit) {
-        break
-      }
-    }
-  } else {
-    const base = new URL(apiUrl)
-    const dramaID = base.searchParams.get('dramaID')
-    if (!dramaID) {
-      throw new Error('Could not determine dramaID from the TikTok player.')
-    }
+  const collected = new Map<string, ResolvedMediaItem>()
+  let dramaId = ''
 
-    pageLoop: for (let cursor = 0; ; cursor += 24) {
+  if (signed) {
+    const targetDramaId = firstItemDramaId(signed.payload)
+    const base = new URL(signed.url)
+    dramaId = targetDramaId || base.searchParams.get('dramaID') || ''
+    ingestEpisodePayload(signed.payload, dramaId, collected)
+
+    for (let cursor = 0; ; cursor += 24) {
       const url = new URL(base.toString())
       url.searchParams.set('count', '24')
       url.searchParams.set('cursor', String(cursor))
-      url.searchParams.set('dramaID', dramaID)
+      if (dramaId) {
+        url.searchParams.set('dramaID', dramaId)
+      }
 
-      const payload = await fetch(url.toString(), { credentials: 'include' }).then((response) => response.json())
-      const itemList = Array.isArray(payload?.itemList) ? payload.itemList : []
-      if (itemList.length === 0) {
+      let payload: any
+      try {
+        payload = await fetch(url.toString(), { credentials: 'include' }).then((response) => response.json())
+      } catch {
         break
       }
 
-      for (const item of itemList) {
-        const resolvedItem = mapDramaEpisodeToResolved(item)
-        if (!resolvedItem.mediaUrl) {
-          console.warn('[sorevid] episode missing media URL', resolvedItem.episodeNumber, item?.id, item?.desc)
-        }
-        results.push(resolvedItem)
-        if (scanLimit && results.length >= scanLimit) {
-          break pageLoop
-        }
-      }
+      const before = collected.size
+      ingestEpisodePayload(payload, dramaId, collected)
+      console.debug('[sorevid] series page', {
+        cursor,
+        added: collected.size - before,
+        total: collected.size,
+        hasMore: payload?.hasMore,
+      })
 
-      const hasMore = payload?.hasMore === true
-      if (!hasMore) {
+      if (payload?.hasMore !== true) {
         break
       }
-
       await wait(randomBetween(...timing.resolveDelay))
     }
+  } else {
+    const html = document.documentElement.outerHTML
+    const seed = parseTikTokItemStruct(html)
+    dramaId = String(seed?.dramaInfo?.dramaID || '')
+    const items = parseTikTokDramaItems(html, dramaId)
+    ingestEpisodePayload({ itemList: items }, dramaId, collected)
   }
 
-  const withMedia = results.filter((entry) => Boolean(entry.mediaUrl)).length
-  console.debug('[sorevid] series scan complete', { total: results.length, withMedia })
+  const results = Array.from(collected.values()).sort(
+    (left, right) => (left.episodeNumber ?? 0) - (right.episodeNumber ?? 0),
+  )
+  console.debug('[sorevid] series scan complete', { dramaId, total: results.length })
 
   if (results.length === 0) {
     throw new Error('No episodes were resolved from this drama.')
   }
 
-  return scanLimit ? results.slice(0, scanLimit) : results
+  return results
 }
 
 type ProfileVideoLink = {
@@ -662,6 +708,41 @@ function parseTikTokItemStruct(html: string): any | null {
   }
 
   return null
+}
+
+function parseTikTokDramaItems(html: string, dramaId: string): any[] {
+  const jsonCandidates = [
+    scriptJsonById(html, '__UNIVERSAL_DATA_FOR_REHYDRATION__'),
+    scriptJsonById(html, 'SIGI_STATE'),
+    scriptJsonById(html, 'sigi-persisted-data'),
+  ].filter(Boolean)
+
+  const found = new Map<string, any>()
+  const visit = (node: any) => {
+    if (!node || typeof node !== 'object') return
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child)
+      return
+    }
+    const looksLikeEpisode = node?.video && node?.dramaInfo && node?.id != null
+    if (looksLikeEpisode) {
+      const id = String(node.dramaInfo?.dramaID || '')
+      if (!dramaId || id === dramaId) {
+        const key = String(node.id)
+        if (!found.has(key)) found.set(key, node)
+      }
+    }
+    for (const value of Object.values(node)) visit(value)
+  }
+
+  for (const candidate of jsonCandidates) {
+    try {
+      visit(JSON.parse(candidate))
+    } catch {
+      // Ignore malformed candidates.
+    }
+  }
+  return Array.from(found.values())
 }
 
 function scriptJsonById(html: string, id: string) {

@@ -33,6 +33,7 @@ type SubtitleMode = 'off' | 'subtitles' | 'auto' | 'both'
 type SubtitleFormat = 'srt' | 'vtt'
 type DanmakuFormat = 'none' | 'xml' | 'ass'
 type BatchOrderMode = 'asScanned' | 'reverse' | 'episodeNumber'
+type BatchFileNameMode = 'episodeOnly' | 'fullTitle'
 type JobStatus =
   | 'queued'
   | 'starting'
@@ -212,6 +213,7 @@ type AppSettings = {
   subtitleFormat: SubtitleFormat
   embedSubtitles: boolean
   danmakuFormat: DanmakuFormat
+  batchFileNameMode: BatchFileNameMode
   cookieProfiles: Record<string, CookieProfile>
   geminiApiKey: string
   geminiModel: string
@@ -292,6 +294,7 @@ const defaultSettings: AppSettings = {
   subtitleFormat: 'srt',
   embedSubtitles: false,
   danmakuFormat: 'none',
+  batchFileNameMode: 'episodeOnly',
   cookieProfiles: {},
   geminiApiKey: '',
   geminiModel: 'gemini-3.1-flash-lite',
@@ -441,6 +444,7 @@ function App() {
   const [selectedPreviewKeys, setSelectedPreviewKeys] = useState<Set<string>>(new Set())
   const [batchEdits, setBatchEdits] = useState<Record<string, BatchItemEdit>>({})
   const [batchOrder, setBatchOrder] = useState<BatchOrderMode>('asScanned')
+  const [batchFileNameMode, setBatchFileNameMode] = useState<BatchFileNameMode>('episodeOnly')
   const [checkingMetadata, setCheckingMetadata] = useState(false)
   const [coverPaths, setCoverPaths] = useState<Record<string, string>>({})
   const [savingCoverUrl, setSavingCoverUrl] = useState('')
@@ -628,6 +632,7 @@ function App() {
       subtitleFormat,
       embedSubtitles,
       danmakuFormat: effectiveDanmakuFormat,
+      batchFileNameMode,
       cookieProfiles,
       geminiApiKey,
       geminiModel,
@@ -645,6 +650,7 @@ function App() {
     cookieMode,
     cookieProfiles,
     audioNotifications,
+    batchFileNameMode,
     effectiveDanmakuFormat,
     downloadDir,
     downloadPreset,
@@ -672,6 +678,11 @@ function App() {
       setEmbedSubtitles(Boolean(settings.embedSubtitles))
       setAudioNotifications(settings.audioNotifications ?? true)
       setDanmakuFormat(isDanmakuFormat(settings.danmakuFormat) ? settings.danmakuFormat : 'none')
+      setBatchFileNameMode(
+        isBatchFileNameMode(settings.batchFileNameMode)
+          ? settings.batchFileNameMode
+          : 'episodeOnly',
+      )
       setGeminiApiKey(settings.geminiApiKey || '')
       setGeminiModel(settings.geminiModel || 'gemini-3.1-flash-lite')
       setDownloadPreset(
@@ -1020,7 +1031,13 @@ function App() {
         }))
     const directItems = directSourceEntries
       .filter((entry) => entry.item.directMediaUrl)
-      .map((entry) => directDownloadItemFromMetadata(entry.item, organizedItemByKey.get(entry.key) || entry))
+      .map((entry) =>
+        directDownloadItemFromMetadata(
+          entry.item,
+          organizedItemByKey.get(entry.key) || entry,
+          batchFileNameMode,
+        ),
+      )
     const regularItemsBase = selectedItems.filter((item) => !item.directMediaUrl)
     const regularItems = directItems.length > 0
       ? regularItemsBase.filter((item) => getPlatformForUrl(item.url) !== 'tiktok')
@@ -1242,6 +1259,12 @@ function App() {
   }
 
   function clearQueue() {
+    setMetadata([])
+    setSelectedPreviewKeys(new Set())
+    setBatchEdits({})
+    setCoverPaths({})
+    setUrlsText('')
+    setError('')
     setJobs((currentJobs) =>
       currentJobs.filter((job) => ['queued', 'starting', 'running', 'warning'].includes(job.status)),
     )
@@ -1259,7 +1282,9 @@ function App() {
     try {
       const message = await invoke<string>('queue_tiktok_rescan', {
         request: {
-          items: selectedOrganizedEntries.map((entry) => directDownloadItemFromMetadata(entry.item, entry)),
+          items: selectedOrganizedEntries.map((entry) =>
+            directDownloadItemFromMetadata(entry.item, entry, batchFileNameMode),
+          ),
         },
       })
       setChromeIntegrationMessage(`${message} Keep a TikTok tab open so the extension can refresh them.`)
@@ -1826,6 +1851,7 @@ function App() {
               </div>
               <BatchOrganizer
                 aiReady={Boolean(geminiApiKey.trim())}
+                batchFileNameMode={batchFileNameMode}
                 batchOrder={batchOrder}
                 isOrganizing={organizingBatch}
                 series={organizedBatch}
@@ -1834,6 +1860,7 @@ function App() {
                 onOrganizeWithAi={organizeBatchWithAi}
                 onRenameSeries={renameBatchSeries}
                 onSelectSeries={selectSeries}
+                onSetBatchFileNameMode={setBatchFileNameMode}
                 onSetBatchOrder={setBatchOrder}
                 onUpdateItem={updateBatchItem}
               />
@@ -1867,10 +1894,10 @@ function App() {
             className="secondary-button"
             type="button"
             onClick={clearQueue}
-            disabled={jobs.length === 0 || jobs.every((job) => ['queued', 'starting', 'running', 'warning'].includes(job.status))}
+            disabled={metadata.length === 0 && urlsText.trim() === '' && jobs.every((job) => ['queued', 'starting', 'running', 'warning'].includes(job.status))}
           >
             <Trash2 />
-            <span>Clear queue</span>
+            <span>Clear all</span>
           </button>
         </div>
 
@@ -2047,6 +2074,7 @@ function CookieProfileCard({
 
 function BatchOrganizer({
   aiReady,
+  batchFileNameMode,
   batchOrder,
   isOrganizing,
   series,
@@ -2055,10 +2083,12 @@ function BatchOrganizer({
   onOrganizeWithAi,
   onRenameSeries,
   onSelectSeries,
+  onSetBatchFileNameMode,
   onSetBatchOrder,
   onUpdateItem,
 }: {
   aiReady: boolean
+  batchFileNameMode: BatchFileNameMode
   batchOrder: BatchOrderMode
   isOrganizing: boolean
   series: OrganizedSeries[]
@@ -2067,6 +2097,7 @@ function BatchOrganizer({
   onOrganizeWithAi: () => void
   onRenameSeries: (series: OrganizedSeries, title: string) => void
   onSelectSeries: (series: OrganizedSeries) => void
+  onSetBatchFileNameMode: (mode: BatchFileNameMode) => void
   onSetBatchOrder: (mode: BatchOrderMode) => void
   onUpdateItem: (key: string, edit: BatchItemEdit) => void
 }) {
@@ -2093,7 +2124,16 @@ function BatchOrganizer({
           </span>
         </div>
         <div className="batch-heading-actions">
-          <small>Folder + episode names are used for direct TikTok downloads.</small>
+          <small>Series folders are used for direct TikTok downloads.</small>
+          <select
+            className="select-input"
+            value={batchFileNameMode}
+            onChange={(event) => onSetBatchFileNameMode(event.target.value as BatchFileNameMode)}
+            title="Direct TikTok file naming"
+          >
+            <option value="episodeOnly">Files: 1.mp4, 2.mp4</option>
+            <option value="fullTitle">Files: full episode title</option>
+          </select>
           <select
             className="select-input"
             value={batchOrder}
@@ -2690,14 +2730,21 @@ function mergeMetadataPreviews(current: MetadataPreview[], incoming: MetadataPre
 function directDownloadItemFromMetadata(
   item: MetadataPreview,
   organized?: OrganizedBatchItem,
+  fileNameMode: BatchFileNameMode = 'episodeOnly',
 ): DirectDownloadItem {
+  const episodeNumber = organized?.episodeNumber || item.episodeNumber
+  const outputFilename =
+    fileNameMode === 'episodeOnly' && episodeNumber
+      ? String(episodeNumber)
+      : organized?.outputTitle
+
   return {
     sourceUrl: item.sourceUrl,
     pageUrl: item.webpageUrl || item.url,
     mediaUrl: item.directMediaUrl || '',
     dramaId: item.dramaId,
     seriesName: item.seriesName,
-    episodeNumber: organized?.episodeNumber || item.episodeNumber,
+    episodeNumber,
     title: organized?.outputTitle || displayPartTitle(item),
     uploader: item.uploader,
     duration: item.duration,
@@ -2708,7 +2755,7 @@ function directDownloadItemFromMetadata(
     height: item.bestHeight,
     subtitles: item.subtitleUrl ? [{ url: item.subtitleUrl }] : [],
     outputFolder: organized?.seriesTitle,
-    outputFilename: organized?.outputTitle,
+    outputFilename,
     cookieHeader: item.cookieHeader,
   }
 }
@@ -3139,6 +3186,10 @@ function isSubtitleFormat(value: string): value is SubtitleFormat {
 
 function isDanmakuFormat(value: string): value is DanmakuFormat {
   return ['none', 'xml', 'ass'].includes(value)
+}
+
+function isBatchFileNameMode(value: string): value is BatchFileNameMode {
+  return ['episodeOnly', 'fullTitle'].includes(value)
 }
 
 function formatResolution(item: MetadataPreview) {
