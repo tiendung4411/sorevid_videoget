@@ -14,6 +14,10 @@
           <strong>SOREVID VideoGET</strong>
           <span id="platform">Checking current tab…</span>
         </div>
+        <select id="language" class="language-select" aria-label="Language">
+          <option value="en">EN</option>
+          <option value="vi">VI</option>
+        </select>
       </header>
       <section class="page-card">
         <strong id="title">Current page</strong>
@@ -21,7 +25,7 @@
       </section>
       <section id="scan-options" class="scan-options" hidden>
         <label>
-          <span>Scan mode</span>
+          <span id="scan-mode-label">Scan mode</span>
           <select id="scan-mode">
             <option value="safe" selected>Safe recommended</option>
             <option value="slow">Slow cautious</option>
@@ -29,7 +33,7 @@
           </select>
         </label>
         <label>
-          <span>Scan limit</span>
+          <span id="scan-limit-label">Scan limit</span>
           <select id="scan-limit">
             <option value="10">10 videos</option>
             <option value="20" selected>20 videos</option>
@@ -45,7 +49,7 @@
       <button id="scan-drama" type="button" class="secondary" hidden>Scan Short Drama</button>
       <button id="download-series" type="button" class="secondary" hidden>Download Full Series</button>
       <button id="run-pending" type="button" class="secondary">Run pending repairs</button>
-      <p>SOREVID VideoGET will open and fill the URL. Review your download options there.</p>
+      <p id="helper-text">SOREVID VideoGET will open and fill the URL. Review your download options there.</p>
     </main>
     <script type="module" src="popup.js"></script>
   </body>

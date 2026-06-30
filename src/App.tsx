@@ -48,6 +48,8 @@ type JobStatus =
   | 'failed'
   | 'canceled'
 
+type AppLanguage = 'en' | 'vi'
+
 type ToolStatus = {
   found: boolean
   path?: string
@@ -399,6 +401,369 @@ const platformConfigs: Record<PlatformKey, { label: string; hosts: string[]; ses
   },
 }
 
+const appCopy = {
+  en: {
+    language: 'Language',
+    english: 'EN',
+    vietnamese: 'VI',
+    appSections: 'App sections',
+    download: 'Download',
+    settings: 'Settings',
+    checkTools: 'Check tools',
+    toolVersions: 'Tool versions',
+    notFound: 'Not found',
+    audioNotifications: 'Audio notifications',
+    audioDescription: 'Play short sounds when downloads start, complete, fail, or need attention.',
+    testSound: 'Test sound',
+    enableDownloadSounds: 'Enable download sounds',
+    aiOrganizer: 'AI organizer',
+    aiOrganizerDescription: 'Used by the Batch organizer button on the Download tab.',
+    googleApiKey: 'Google AI Studio API key',
+    pasteApiKey: 'Paste API key',
+    model: 'Model',
+    output: 'Output',
+    outputDescription: 'Folder and media format used when starting downloads.',
+    downloadFolder: 'Download folder',
+    chooseFolder: 'Choose folder',
+    formatPreset: 'Format preset',
+    best: 'Best',
+    audio: 'Audio',
+    video: 'Video',
+    original: 'Original',
+    subtitlesAndDanmaku: 'Subtitles & Danmaku',
+    subtitlesDescription: 'Download subtitle sidecars, BiliBili danmaku XML, or convert danmaku XML to ASS after download.',
+    subtitles: 'Subtitles',
+    off: 'Off',
+    subs: 'Subs',
+    auto: 'Auto',
+    both: 'Both',
+    subtitleFormat: 'Subtitle format',
+    danmaku: 'Danmaku',
+    embedSubtitles: 'Embed subtitles into MP4 when possible',
+    platformCookieProfiles: 'Platform cookie profiles',
+    detectedProtectedPlatforms: 'Detected protected platforms from the pasted URLs.',
+    choosePlatformSession: 'Choose a platform session before preview/download.',
+    missing: 'Missing:',
+    cookieSensitive: 'Cookie files are sensitive. This app passes them only to local yt-dlp and does not upload or sync them.',
+    detectedCookieNotice: (platforms: string) =>
+      `${platforms} detected. The app will use the matching platform cookie profile for preview and download.`,
+    chromeBridge: 'Chrome Integration Bridge',
+    chromeBridgeDescription: 'Register the desktop bridge, then load the extension separately in Chrome.',
+    installed: 'Installed',
+    invalid: 'Invalid',
+    notInstalled: 'Not installed',
+    registerBridge: 'Register bridge',
+    testDesktopBridge: 'Test desktop bridge',
+    removeBridge: 'Remove bridge',
+    chromeExtensionSeparate: 'Chrome extension is a separate step',
+    chromeExtensionSteps: 'Open chrome://extensions, enable Developer mode, choose Load unpacked, then select the dist-extension folder.',
+    urls: 'URLs',
+    urlsPlaceholder: 'Paste one or more video, playlist, or audio URLs...',
+    previewReady: (count: number) => `${count} preview ready`,
+    runPreviewFirst: 'Run preview before downloading protected links.',
+    channelPreviewLimited: 'Channel/profile pages are previewed in limited mode to avoid endless loading. You can still download the full channel, but preview only loads the first batch of items.',
+    metadataPreview: 'Metadata preview',
+    selectedCount: (selected: number, total: number) => `${selected}/${total} selected`,
+    selectedFromPlaylist: ' from playlist',
+    selectAll: 'Select all',
+    selectNone: 'Select none',
+    queue: 'Queue',
+    downloadedCount: (done: number, total: number) => `${done}/${total} downloaded`,
+    clearAll: 'Clear all',
+    noDownloads: 'No downloads yet.',
+    downloadActions: 'Download actions',
+    urlsReady: (count: number) => `${count} URL${count === 1 ? '' : 's'} ready`,
+    noOutputFolder: 'No output folder selected',
+    preview: 'Preview',
+    checkSubtitles: 'Check subtitles',
+    rescanSelected: 'Re-scan selected',
+    starting: 'Starting...',
+    startDownload: 'Start download',
+    ready: 'Ready',
+    needsSession: 'Needs session',
+    none: 'None',
+    chrome: 'Chrome',
+    manual: 'Manual',
+    importCookies: (platform: string) => `Import ${platform} cookies.txt`,
+    exportFromChrome: 'Export from Chrome',
+    validate: 'Validate',
+    delete: 'Delete',
+    validCookieFile: 'Valid cookie file',
+    invalidCookieFile: 'Invalid cookie file',
+    batchOrganizer: 'Batch organizer',
+    batchSummary: (series: number, items: number) =>
+      `${series} series group${series === 1 ? '' : 's'} from ${items} preview item${items === 1 ? '' : 's'}`,
+    seriesFoldersHint: 'Series folders are used for direct TikTok downloads.',
+    episodeFileNames: 'Episode file names',
+    directTikTokFileNaming: 'Direct TikTok file naming',
+    episodeNumbersOnly: 'Episode numbers only',
+    seriesEpisodeTitle: 'Series + episode title',
+    example: 'Example:',
+    asScanned: 'As scanned',
+    reverseOrder: 'Reverse order',
+    sortByEpisode: 'Sort by episode',
+    organizing: 'Organizing...',
+    organizeWithAi: 'Organize with AI',
+    copied: 'Copied',
+    copyAiPrompt: 'Copy AI prompt',
+    selectSeries: (index: number) => `Select series ${index}`,
+    series: 'Series',
+    selected: 'selected',
+    select: 'Select',
+    clear: 'Clear',
+    title: 'Title',
+    pinned: 'Pinned - ',
+    checkOrder: 'Check order - ',
+    moreEpisodes: (count: number) => `+ ${count} more episode${count === 1 ? '' : 's'} in this series`,
+    durationUnknown: 'Duration unknown',
+    uploaderUnknown: 'Uploader unknown',
+    formats: (count: number) => `${count} formats`,
+    recommended: 'Recommended:',
+    viewCover: 'View cover',
+    saveAgain: 'Save again',
+    saveCover: 'Save cover',
+    saved: 'Saved',
+    subtitleRecoveryPending: 'Subtitle recovery pending after re-scan.',
+    missingSubtitleSidecar: 'Missing subtitle sidecar. Selected for re-scan.',
+    closeCoverPreview: 'Close cover preview',
+    noPreview: 'No preview',
+    more: 'more',
+    waiting: 'Waiting',
+    speedPending: 'Speed pending',
+    etaPending: 'ETA pending',
+    eta: 'ETA',
+    activityLog: 'Activity log',
+    lines: 'lines',
+    noVideo: 'no video',
+    noAudio: 'no audio',
+    resolutionUnknown: 'Resolution unknown',
+    open: 'Open',
+    folder: 'Folder',
+    convertH264: 'Convert H.264',
+    cancel: 'Cancel',
+    clips: 'clips',
+    urlsQueued: (count: number) => `${count} URLs queued`,
+    singleVideo: 'Single video',
+    waitingForActivity: 'Waiting for activity...',
+    batchProgress: 'Batch progress',
+    unknown: 'unknown',
+    saving: 'Saving:',
+    statusCompleted: 'Download completed.',
+    statusFailed: 'Download failed.',
+    statusQueued: 'Waiting to start.',
+    statusStarting: 'Starting download...',
+    statusRunning: 'Downloading...',
+    statusCanceled: 'Download canceled.',
+    statusWorking: 'Working...',
+    errors: {
+      folderPicker: 'Folder picker is available in the Tauri desktop app.',
+      cookieImport: 'Cookie import is available in the Tauri desktop app.',
+      metadataDesktop: 'Metadata preview runs inside the Tauri desktop app.',
+      addUrl: 'Add at least one URL.',
+      downloadsDesktop: 'Downloads run inside the Tauri desktop app.',
+      selectPreview: 'Select at least one preview item to download.',
+      chooseDownloadFolder: 'Choose a download folder.',
+      ffmpegRequired: 'ffmpeg is required to embed subtitles into MP4.',
+      previewDirectFirst: 'Preview or import direct TikTok items before checking subtitles.',
+      chooseFolderBeforeSubs: 'Choose a download folder before checking subtitles.',
+      selectResolvedTikTok: 'Select at least one resolved TikTok item to re-scan.',
+      coverDesktop: 'Cover download runs inside the Tauri desktop app.',
+      chooseFolderBeforeCover: 'Choose a download folder before saving the cover.',
+      noCover: 'This video does not expose a cover image.',
+      scanBeforeAi: 'Scan or preview videos before organizing with AI.',
+      addAiKey: 'Add a Google AI Studio API key before organizing with AI.',
+      aiDesktop: 'AI organizer runs inside the Tauri desktop app.',
+    },
+    dialogs: {
+      chooseDownloadFolder: 'Choose download folder',
+      chooseCookies: 'Choose cookies.txt',
+      cookieTextFile: 'Cookie text file',
+      deleteCookie: (platform: string) => `Delete the managed ${platform} cookie file?`,
+    },
+  },
+  vi: {
+    language: 'Ngôn ngữ',
+    english: 'EN',
+    vietnamese: 'VI',
+    appSections: 'Khu vực ứng dụng',
+    download: 'Tải xuống',
+    settings: 'Cài đặt',
+    checkTools: 'Kiểm tra công cụ',
+    toolVersions: 'Phiên bản công cụ',
+    notFound: 'Không tìm thấy',
+    audioNotifications: 'Thông báo âm thanh',
+    audioDescription: 'Phát âm ngắn khi tải bắt đầu, hoàn tất, lỗi hoặc cần chú ý.',
+    testSound: 'Thử âm thanh',
+    enableDownloadSounds: 'Bật âm thanh tải xuống',
+    aiOrganizer: 'Sắp xếp bằng AI',
+    aiOrganizerDescription: 'Dùng cho nút Batch organizer trong tab Tải xuống.',
+    googleApiKey: 'Google AI Studio API key',
+    pasteApiKey: 'Dán API key',
+    model: 'Model',
+    output: 'Đầu ra',
+    outputDescription: 'Thư mục và định dạng media dùng khi bắt đầu tải.',
+    downloadFolder: 'Thư mục tải xuống',
+    chooseFolder: 'Chọn thư mục',
+    formatPreset: 'Định dạng',
+    best: 'Tốt nhất',
+    audio: 'Âm thanh',
+    video: 'Video',
+    original: 'Gốc',
+    subtitlesAndDanmaku: 'Phụ đề & Danmaku',
+    subtitlesDescription: 'Tải phụ đề rời, danmaku XML của BiliBili, hoặc chuyển danmaku XML sang ASS sau khi tải.',
+    subtitles: 'Phụ đề',
+    off: 'Tắt',
+    subs: 'Phụ đề',
+    auto: 'Tự động',
+    both: 'Cả hai',
+    subtitleFormat: 'Định dạng phụ đề',
+    danmaku: 'Danmaku',
+    embedSubtitles: 'Nhúng phụ đề vào MP4 khi có thể',
+    platformCookieProfiles: 'Hồ sơ cookie theo nền tảng',
+    detectedProtectedPlatforms: 'Đã nhận diện nền tảng cần đăng nhập từ URL đã dán.',
+    choosePlatformSession: 'Chọn phiên đăng nhập nền tảng trước khi xem trước/tải.',
+    missing: 'Thiếu:',
+    cookieSensitive: 'File cookie là dữ liệu nhạy cảm. App chỉ đưa cookie cho yt-dlp cục bộ, không upload hoặc đồng bộ.',
+    detectedCookieNotice: (platforms: string) =>
+      `Đã nhận diện ${platforms}. App sẽ dùng hồ sơ cookie tương ứng để xem trước và tải xuống.`,
+    chromeBridge: 'Cầu nối Chrome',
+    chromeBridgeDescription: 'Đăng ký cầu nối desktop, sau đó nạp extension riêng trong Chrome.',
+    installed: 'Đã cài',
+    invalid: 'Không hợp lệ',
+    notInstalled: 'Chưa cài',
+    registerBridge: 'Đăng ký cầu nối',
+    testDesktopBridge: 'Kiểm tra cầu nối',
+    removeBridge: 'Gỡ cầu nối',
+    chromeExtensionSeparate: 'Chrome extension là bước riêng',
+    chromeExtensionSteps: 'Mở chrome://extensions, bật Developer mode, chọn Load unpacked, rồi chọn thư mục dist-extension.',
+    urls: 'URL',
+    urlsPlaceholder: 'Dán một hoặc nhiều URL video, playlist hoặc audio...',
+    previewReady: (count: number) => `${count} mục xem trước sẵn sàng`,
+    runPreviewFirst: 'Chạy xem trước trước khi tải link cần bảo vệ.',
+    channelPreviewLimited: 'Trang kênh/profile được xem trước ở chế độ giới hạn để tránh tải vô tận. Bạn vẫn có thể tải toàn kênh, nhưng xem trước chỉ lấy lô đầu tiên.',
+    metadataPreview: 'Xem trước metadata',
+    selectedCount: (selected: number, total: number) => `${selected}/${total} đã chọn`,
+    selectedFromPlaylist: ' từ playlist',
+    selectAll: 'Chọn tất cả',
+    selectNone: 'Bỏ chọn',
+    queue: 'Hàng đợi',
+    downloadedCount: (done: number, total: number) => `${done}/${total} đã tải`,
+    clearAll: 'Xóa tất cả',
+    noDownloads: 'Chưa có lượt tải.',
+    downloadActions: 'Thao tác tải xuống',
+    urlsReady: (count: number) => `${count} URL sẵn sàng`,
+    noOutputFolder: 'Chưa chọn thư mục đầu ra',
+    preview: 'Xem trước',
+    checkSubtitles: 'Kiểm tra phụ đề',
+    rescanSelected: 'Quét lại mục đã chọn',
+    starting: 'Đang bắt đầu...',
+    startDownload: 'Bắt đầu tải',
+    ready: 'Sẵn sàng',
+    needsSession: 'Cần phiên đăng nhập',
+    none: 'Không',
+    chrome: 'Chrome',
+    manual: 'Thủ công',
+    importCookies: (platform: string) => `Nhập cookies.txt cho ${platform}`,
+    exportFromChrome: 'Xuất từ Chrome',
+    validate: 'Kiểm tra',
+    delete: 'Xóa',
+    validCookieFile: 'File cookie hợp lệ',
+    invalidCookieFile: 'File cookie không hợp lệ',
+    batchOrganizer: 'Sắp xếp batch',
+    batchSummary: (series: number, items: number) =>
+      `${series} nhóm series từ ${items} mục xem trước`,
+    seriesFoldersHint: 'Thư mục series được dùng cho tải TikTok trực tiếp.',
+    episodeFileNames: 'Tên file tập',
+    directTikTokFileNaming: 'Cách đặt tên file TikTok trực tiếp',
+    episodeNumbersOnly: 'Chỉ số tập',
+    seriesEpisodeTitle: 'Series + tên tập',
+    example: 'Ví dụ:',
+    asScanned: 'Theo thứ tự quét',
+    reverseOrder: 'Đảo ngược',
+    sortByEpisode: 'Sắp theo tập',
+    organizing: 'Đang sắp xếp...',
+    organizeWithAi: 'Sắp xếp bằng AI',
+    copied: 'Đã copy',
+    copyAiPrompt: 'Copy prompt AI',
+    selectSeries: (index: number) => `Chọn series ${index}`,
+    series: 'Series',
+    selected: 'đã chọn',
+    select: 'Chọn',
+    clear: 'Xóa',
+    title: 'Tiêu đề',
+    pinned: 'Đã ghim - ',
+    checkOrder: 'Kiểm tra thứ tự - ',
+    moreEpisodes: (count: number) => `+ ${count} tập khác trong series này`,
+    durationUnknown: 'Chưa rõ thời lượng',
+    uploaderUnknown: 'Chưa rõ uploader',
+    formats: (count: number) => `${count} định dạng`,
+    recommended: 'Đề xuất:',
+    viewCover: 'Xem cover',
+    saveAgain: 'Lưu lại',
+    saveCover: 'Lưu cover',
+    saved: 'Đã lưu',
+    subtitleRecoveryPending: 'Đang chờ khôi phục phụ đề sau khi quét lại.',
+    missingSubtitleSidecar: 'Thiếu file phụ đề rời. Đã chọn để quét lại.',
+    closeCoverPreview: 'Đóng xem trước cover',
+    noPreview: 'Không có xem trước',
+    more: 'mục nữa',
+    waiting: 'Đang chờ',
+    speedPending: 'Chưa có tốc độ',
+    etaPending: 'Chưa có ETA',
+    eta: 'ETA',
+    activityLog: 'Nhật ký hoạt động',
+    lines: 'dòng',
+    noVideo: 'không có video',
+    noAudio: 'không có audio',
+    resolutionUnknown: 'Chưa rõ độ phân giải',
+    open: 'Mở',
+    folder: 'Thư mục',
+    convertH264: 'Chuyển H.264',
+    cancel: 'Hủy',
+    clips: 'clip',
+    urlsQueued: (count: number) => `${count} URL trong hàng đợi`,
+    singleVideo: 'Một video',
+    waitingForActivity: 'Đang chờ hoạt động...',
+    batchProgress: 'Tiến độ batch',
+    unknown: 'không rõ',
+    saving: 'Đang lưu:',
+    statusCompleted: 'Tải xuống hoàn tất.',
+    statusFailed: 'Tải xuống thất bại.',
+    statusQueued: 'Đang chờ bắt đầu.',
+    statusStarting: 'Đang bắt đầu tải...',
+    statusRunning: 'Đang tải...',
+    statusCanceled: 'Đã hủy tải xuống.',
+    statusWorking: 'Đang xử lý...',
+    errors: {
+      folderPicker: 'Bộ chọn thư mục chỉ có trong app desktop Tauri.',
+      cookieImport: 'Nhập cookie chỉ có trong app desktop Tauri.',
+      metadataDesktop: 'Xem trước metadata chạy trong app desktop Tauri.',
+      addUrl: 'Thêm ít nhất một URL.',
+      downloadsDesktop: 'Tải xuống chạy trong app desktop Tauri.',
+      selectPreview: 'Chọn ít nhất một mục xem trước để tải.',
+      chooseDownloadFolder: 'Chọn thư mục tải xuống.',
+      ffmpegRequired: 'Cần ffmpeg để nhúng phụ đề vào MP4.',
+      previewDirectFirst: 'Hãy xem trước hoặc nhập mục TikTok trực tiếp trước khi kiểm tra phụ đề.',
+      chooseFolderBeforeSubs: 'Chọn thư mục tải xuống trước khi kiểm tra phụ đề.',
+      selectResolvedTikTok: 'Chọn ít nhất một mục TikTok đã resolve để quét lại.',
+      coverDesktop: 'Tải cover chạy trong app desktop Tauri.',
+      chooseFolderBeforeCover: 'Chọn thư mục tải xuống trước khi lưu cover.',
+      noCover: 'Video này không có ảnh cover.',
+      scanBeforeAi: 'Quét hoặc xem trước video trước khi sắp xếp bằng AI.',
+      addAiKey: 'Thêm Google AI Studio API key trước khi sắp xếp bằng AI.',
+      aiDesktop: 'AI organizer chạy trong app desktop Tauri.',
+    },
+    dialogs: {
+      chooseDownloadFolder: 'Chọn thư mục tải xuống',
+      chooseCookies: 'Chọn cookies.txt',
+      cookieTextFile: 'File cookie dạng text',
+      deleteCookie: (platform: string) => `Xóa file cookie ${platform} do app quản lý?`,
+    },
+  },
+} satisfies Record<AppLanguage, Record<string, unknown>>
+
+type AppCopy = typeof appCopy.en
+
 const defaultCookieProfile: CookieProfile = {
   mode: 'none',
   manualCookiePath: '',
@@ -444,6 +809,7 @@ function isTikTokChannelUrl(url: string) {
 }
 
 function App() {
+  const [language, setLanguage] = useState<AppLanguage>(() => readSavedLanguage())
   const [bootLoading, setBootLoading] = useState(true)
   const [urlsText, setUrlsText] = useState('')
   const [downloadDir, setDownloadDir] = useState('')
@@ -486,6 +852,7 @@ function App() {
   const [cookieBusyPlatform, setCookieBusyPlatform] = useState('')
   const [cookieMessage, setCookieMessage] = useState('')
   const [organizingBatch, setOrganizingBatch] = useState(false)
+  const copy = appCopy[language]
   const audioNotificationsRef = useRef(audioNotifications)
   const jobAudioStateRef = useRef<Map<string, JobAudioState>>(new Map())
   const pendingSubtitleRepairsRef = useRef<PendingSubtitleRepair[]>([])
@@ -545,6 +912,11 @@ function App() {
     const timer = window.setTimeout(() => setBootLoading(false), 2000)
     return () => window.clearTimeout(timer)
   }, [])
+
+  useEffect(() => {
+    localStorage.setItem('sorevid-language', language)
+    document.documentElement.lang = language === 'vi' ? 'vi' : 'en'
+  }, [language])
 
   useEffect(() => {
     audioNotificationsRef.current = audioNotifications
@@ -814,14 +1186,14 @@ function App() {
 
   async function chooseDownloadDir() {
     if (!isTauriRuntime()) {
-      setError('Folder picker is available in the Tauri desktop app.')
+      setError(copy.errors.folderPicker)
       return
     }
 
     const selected = await open({
       directory: true,
       multiple: false,
-      title: 'Choose download folder',
+      title: copy.dialogs.chooseDownloadFolder,
     })
 
     if (typeof selected === 'string') {
@@ -831,15 +1203,15 @@ function App() {
 
   async function chooseCookieFile(platformKey?: PlatformKey) {
     if (!isTauriRuntime()) {
-      setError('Cookie import is available in the Tauri desktop app.')
+      setError(copy.errors.cookieImport)
       return
     }
 
     const selected = await open({
       directory: false,
       multiple: false,
-      title: 'Choose cookies.txt',
-      filters: [{ name: 'Cookie text file', extensions: ['txt'] }],
+      title: copy.dialogs.chooseCookies,
+      filters: [{ name: copy.dialogs.cookieTextFile, extensions: ['txt'] }],
     })
 
     if (typeof selected === 'string') {
@@ -909,7 +1281,7 @@ function App() {
   async function deleteCookieProfile(platformKey: PlatformKey) {
     const profile = getCookieProfile(cookieProfiles, platformKey)
     if (!profile.manualCookiePath) return
-    if (!window.confirm(`Delete the managed ${platformConfigs[platformKey].label} cookie file?`)) {
+    if (!window.confirm(copy.dialogs.deleteCookie(platformConfigs[platformKey].label))) {
       return
     }
     setCookieBusyPlatform(platformKey)
@@ -997,12 +1369,12 @@ function App() {
     setBatchEdits({})
 
     if (!isTauriRuntime()) {
-      setError('Metadata preview runs inside the Tauri desktop app.')
+      setError(copy.errors.metadataDesktop)
       return
     }
 
     if (urls.length === 0) {
-      setError('Add at least one URL.')
+      setError(copy.errors.addUrl)
       return
     }
 
@@ -1067,7 +1439,7 @@ function App() {
     }
 
     if (!isTauriRuntime()) {
-      setError('Downloads run inside the Tauri desktop app.')
+      setError(copy.errors.downloadsDesktop)
       return
     }
 
@@ -1110,22 +1482,22 @@ function App() {
     const downloadTitles = regularItems.map((item) => displayPartTitle(item))
 
     if (downloadUrls.length === 0 && directItems.length === 0) {
-      setError('Add at least one URL.')
+      setError(copy.errors.addUrl)
       return
     }
 
     if (metadata.length > 0 && selectedItems.length === 0) {
-      setError('Select at least one preview item to download.')
+      setError(copy.errors.selectPreview)
       return
     }
 
     if (!downloadDir) {
-      setError('Choose a download folder.')
+      setError(copy.errors.chooseDownloadFolder)
       return
     }
 
     if (embedSubtitles && subtitleMode !== 'off' && !tools.ffmpeg.found) {
-      setError('ffmpeg is required to embed subtitles into MP4.')
+      setError(copy.errors.ffmpegRequired)
       return
     }
 
@@ -1344,11 +1716,11 @@ function App() {
       .flatMap((series) => series.items)
       .filter((entry) => entry.item.directMediaUrl)
     if (directEntries.length === 0) {
-      setError('Preview or import direct TikTok items before checking subtitles.')
+      setError(copy.errors.previewDirectFirst)
       return
     }
     if (!downloadDir) {
-      setError('Choose a download folder before checking subtitles.')
+      setError(copy.errors.chooseFolderBeforeSubs)
       return
     }
 
@@ -1410,7 +1782,7 @@ function App() {
       .flatMap((series) => series.items)
       .filter((entry) => selectedPreviewKeys.has(entry.key) && entry.item.directMediaUrl)
     if (selectedOrganizedEntries.length === 0) {
-      setError('Select at least one resolved TikTok item to re-scan.')
+      setError(copy.errors.selectResolvedTikTok)
       setRescanQueueing(false)
       return
     }
@@ -1444,17 +1816,17 @@ function App() {
     setError('')
 
     if (!isTauriRuntime()) {
-      setError('Cover download runs inside the Tauri desktop app.')
+      setError(copy.errors.coverDesktop)
       return
     }
 
     if (!downloadDir) {
-      setError('Choose a download folder before saving the cover.')
+      setError(copy.errors.chooseFolderBeforeCover)
       return
     }
 
     if (!item.thumbnail) {
-      setError('This video does not expose a cover image.')
+      setError(copy.errors.noCover)
       return
     }
 
@@ -1497,7 +1869,7 @@ function App() {
         title: item.title || 'Cover image',
       })
     } else {
-      setError('This video does not expose a cover image.')
+      setError(copy.errors.noCover)
     }
   }
 
@@ -1564,15 +1936,15 @@ function App() {
   async function organizeBatchWithAi() {
     setError('')
     if (!metadata.length) {
-      setError('Scan or preview videos before organizing with AI.')
+      setError(copy.errors.scanBeforeAi)
       return
     }
     if (!geminiApiKey.trim()) {
-      setError('Add a Google AI Studio API key before organizing with AI.')
+      setError(copy.errors.addAiKey)
       return
     }
     if (!isTauriRuntime()) {
-      setError('AI organizer runs inside the Tauri desktop app.')
+      setError(copy.errors.aiDesktop)
       return
     }
 
@@ -1673,42 +2045,53 @@ function App() {
             </div>
           </div>
           <div className="topbar-actions">
-            <nav className="page-tabs" aria-label="App sections">
+            <nav className="page-tabs" aria-label={copy.appSections}>
               <button
                 className={activeTab === 'download' ? 'tab-button active' : 'tab-button'}
                 type="button"
                 onClick={() => setActiveTab('download')}
               >
-                Download
+                {copy.download}
               </button>
               <button
                 className={activeTab === 'settings' ? 'tab-button active' : 'tab-button'}
                 type="button"
                 onClick={() => setActiveTab('settings')}
               >
-                Settings
+                {copy.settings}
               </button>
             </nav>
+            <label className="language-switcher">
+              <span>{copy.language}</span>
+              <select
+                className="select-input"
+                value={language}
+                onChange={(event) => setLanguage(event.target.value as AppLanguage)}
+              >
+                <option value="en">{copy.english}</option>
+                <option value="vi">{copy.vietnamese}</option>
+              </select>
+            </label>
             <button className="icon-button" type="button" onClick={refreshTools}>
               {checkingTools ? <Loader2 className="spin" /> : <RefreshCw />}
-              <span>Check tools</span>
+              <span>{copy.checkTools}</span>
             </button>
           </div>
         </header>
 
         {activeTab === 'settings' && (
           <div className="tab-panel">
-            <section className="tool-strip" aria-label="Tool versions">
-              <ToolBadge label="yt-dlp" tool={tools.ytDlp} />
-              <ToolBadge label="ffmpeg" tool={tools.ffmpeg} />
-              <ToolBadge label="ffprobe" tool={tools.ffprobe} />
+            <section className="tool-strip" aria-label={copy.toolVersions}>
+              <ToolBadge copy={copy} label="yt-dlp" tool={tools.ytDlp} />
+              <ToolBadge copy={copy} label="ffmpeg" tool={tools.ffmpeg} />
+              <ToolBadge copy={copy} label="ffprobe" tool={tools.ffprobe} />
             </section>
 
-            <section className="settings-panel" aria-label="Audio notification settings">
+            <section className="settings-panel" aria-label={copy.audioNotifications}>
               <div className="settings-heading">
                 <div>
-                  <strong>Audio notifications</strong>
-                  <span>Play short sounds when downloads start, complete, fail, or need attention.</span>
+                  <strong>{copy.audioNotifications}</strong>
+                  <span>{copy.audioDescription}</span>
                 </div>
                 <button
                   className="secondary-button"
@@ -1716,7 +2099,7 @@ function App() {
                   onClick={() => playNotificationTone('complete')}
                 >
                   <Bell />
-                  <span>Test sound</span>
+                  <span>{copy.testSound}</span>
                 </button>
               </div>
               <label className="check-row">
@@ -1725,30 +2108,30 @@ function App() {
                   checked={audioNotifications}
                   onChange={(event) => setAudioNotifications(event.target.checked)}
                 />
-                <span>Enable download sounds</span>
+                <span>{copy.enableDownloadSounds}</span>
               </label>
             </section>
 
-            <section className="settings-panel" aria-label="AI organizer settings">
+            <section className="settings-panel" aria-label={copy.aiOrganizer}>
               <div className="settings-heading">
                 <div>
-                  <strong>AI organizer</strong>
-                  <span>Used by the Batch organizer button on the Download tab.</span>
+                  <strong>{copy.aiOrganizer}</strong>
+                  <span>{copy.aiOrganizerDescription}</span>
                 </div>
               </div>
               <div className="settings-grid">
                 <label className="field-block">
-                  <span>Google AI Studio API key</span>
+                  <span>{copy.googleApiKey}</span>
                   <input
                     className="text-input"
                     type="password"
                     value={geminiApiKey}
                     onChange={(event) => setGeminiApiKey(event.target.value)}
-                    placeholder="Paste API key"
+                    placeholder={copy.pasteApiKey}
                   />
                 </label>
                 <label className="field-block">
-                  <span>Model</span>
+                  <span>{copy.model}</span>
                   <input
                     className="text-input"
                     value={geminiModel}
@@ -1759,43 +2142,43 @@ function App() {
               </div>
             </section>
 
-            <section className="settings-panel" aria-label="Download output settings">
+            <section className="settings-panel" aria-label={copy.output}>
               <div className="settings-heading">
                 <div>
-                  <strong>Output</strong>
-                  <span>Folder and media format used when starting downloads.</span>
+                  <strong>{copy.output}</strong>
+                  <span>{copy.outputDescription}</span>
                 </div>
               </div>
               <div className="control-grid">
                 <div className="field-block">
-                  <label>Download folder</label>
+                  <label>{copy.downloadFolder}</label>
                   <button
                     className="path-button"
                     type="button"
                     onClick={chooseDownloadDir}
                   >
                     <FolderOpen />
-                    <span>{downloadDir || 'Choose folder'}</span>
+                    <span>{downloadDir || copy.chooseFolder}</span>
                   </button>
                 </div>
 
                 <div className="field-block">
-                  <label>Format preset</label>
+                  <label>{copy.formatPreset}</label>
                   <div className="segmented format-presets">
                     <SegmentButton active={downloadPreset === 'compatibleMp4'} onClick={() => setDownloadPreset('compatibleMp4')}>
                       MP4
                     </SegmentButton>
                     <SegmentButton active={downloadPreset === 'bestQuality'} onClick={() => setDownloadPreset('bestQuality')}>
-                      Best
+                      {copy.best}
                     </SegmentButton>
                     <SegmentButton active={downloadPreset === 'audioOnly'} onClick={() => setDownloadPreset('audioOnly')}>
-                      Audio
+                      {copy.audio}
                     </SegmentButton>
                     <SegmentButton active={downloadPreset === 'videoOnly'} onClick={() => setDownloadPreset('videoOnly')}>
-                      Video
+                      {copy.video}
                     </SegmentButton>
                     <SegmentButton active={downloadPreset === 'originalCodec'} onClick={() => setDownloadPreset('originalCodec')}>
-                      Original
+                      {copy.original}
                     </SegmentButton>
                   </div>
                 </div>
@@ -1803,35 +2186,35 @@ function App() {
             </section>
 
             {hasBilibiliUrl && (
-              <section className="subtitle-panel" aria-label="Subtitles and danmaku">
+              <section className="subtitle-panel" aria-label={copy.subtitlesAndDanmaku}>
                 <div className="subtitle-panel-heading">
                   <div>
-                    <strong>Subtitles & Danmaku</strong>
-                    <span>Download subtitle sidecars, BiliBili danmaku XML, or convert danmaku XML to ASS after download.</span>
+                    <strong>{copy.subtitlesAndDanmaku}</strong>
+                    <span>{copy.subtitlesDescription}</span>
                   </div>
                 </div>
 
                 <div className="subtitle-grid">
                   <div className="field-block">
-                    <label>Subtitles</label>
+                    <label>{copy.subtitles}</label>
                     <div className="segmented subtitle-modes">
                       <SegmentButton active={subtitleMode === 'off'} onClick={() => setSubtitleMode('off')}>
-                        Off
+                        {copy.off}
                       </SegmentButton>
                       <SegmentButton active={subtitleMode === 'subtitles'} onClick={() => setSubtitleMode('subtitles')}>
-                        Subs
+                        {copy.subs}
                       </SegmentButton>
                       <SegmentButton active={subtitleMode === 'auto'} onClick={() => setSubtitleMode('auto')}>
-                        Auto
+                        {copy.auto}
                       </SegmentButton>
                       <SegmentButton active={subtitleMode === 'both'} onClick={() => setSubtitleMode('both')}>
-                        Both
+                        {copy.both}
                       </SegmentButton>
                     </div>
                   </div>
 
                   <div className="field-block">
-                    <label>Subtitle format</label>
+                    <label>{copy.subtitleFormat}</label>
                     <div className="segmented">
                       <SegmentButton active={subtitleFormat === 'srt'} onClick={() => setSubtitleFormat('srt')}>
                         SRT
@@ -1843,10 +2226,10 @@ function App() {
                   </div>
 
                   <div className="field-block">
-                    <label>Danmaku</label>
+                    <label>{copy.danmaku}</label>
                     <div className="segmented">
                       <SegmentButton active={danmakuFormat === 'none'} onClick={() => setDanmakuFormat('none')}>
-                        Off
+                        {copy.off}
                       </SegmentButton>
                       <SegmentButton active={danmakuFormat === 'xml'} onClick={() => setDanmakuFormat('xml')}>
                         XML
@@ -1864,25 +2247,25 @@ function App() {
                       disabled={subtitleMode === 'off'}
                       onChange={(event) => setEmbedSubtitles(event.target.checked)}
                     />
-                    <span>Embed subtitles into MP4 when possible</span>
+                    <span>{copy.embedSubtitles}</span>
                   </label>
                 </div>
               </section>
             )}
 
-            <section className="platform-cookie-panel" aria-label="Platform cookie profiles">
+            <section className="platform-cookie-panel" aria-label={copy.platformCookieProfiles}>
               <div className="cookie-panel-heading">
                 <div>
-                  <strong>Platform cookie profiles</strong>
+                  <strong>{copy.platformCookieProfiles}</strong>
                   <span>
                     {requiredPlatformKeys.length > 0
-                      ? 'Detected protected platforms from the pasted URLs.'
-                      : 'Choose a platform session before preview/download.'}
+                      ? copy.detectedProtectedPlatforms
+                      : copy.choosePlatformSession}
                   </span>
                 </div>
                 {missingCookiePlatforms.length > 0 && (
                   <small>
-                    Missing: {missingCookiePlatforms.map((key) => platformConfigs[key].label).join(', ')}
+                    {copy.missing} {missingCookiePlatforms.map((key) => platformConfigs[key].label).join(', ')}
                   </small>
                 )}
               </div>
@@ -1900,6 +2283,7 @@ function App() {
                     onDelete={() => deleteCookieProfile(platformKey)}
                     status={cookieStatuses[platformKey]}
                     busy={cookieBusyPlatform === platformKey}
+                    copy={copy}
                   />
                 ))}
               </div>
@@ -1910,29 +2294,29 @@ function App() {
               <ShieldAlert />
               <span>
                 {requiredPlatformKeys.length > 0
-                  ? `${requiredPlatformKeys.map((key) => platformConfigs[key].label).join(', ')} detected. The app will use the matching platform cookie profile for preview and download.`
-                  : 'Cookie files are sensitive. This app passes them only to local yt-dlp and does not upload or sync them.'}
+                  ? copy.detectedCookieNotice(requiredPlatformKeys.map((key) => platformConfigs[key].label).join(', '))
+                  : copy.cookieSensitive}
               </span>
             </div>
 
-            <section className="chrome-integration-panel" aria-label="Chrome integration">
+            <section className="chrome-integration-panel" aria-label={copy.chromeBridge}>
               <div className="chrome-integration-heading">
                 <div className={`integration-icon ${chromeIntegration?.state || 'unknown'}`}>
                   <Cable />
                 </div>
                 <div>
-                  <strong>Chrome Integration Bridge</strong>
+                  <strong>{copy.chromeBridge}</strong>
                   <span>
                     {chromeIntegration?.message ||
-                      'Register the desktop bridge, then load the extension separately in Chrome.'}
+                      copy.chromeBridgeDescription}
                   </span>
                 </div>
                 <small className={chromeIntegration?.state || 'unknown'}>
                   {chromeIntegration?.state === 'installed'
-                    ? 'Installed'
+                    ? copy.installed
                     : chromeIntegration?.state === 'invalid'
-                      ? 'Invalid'
-                      : 'Not installed'}
+                      ? copy.invalid
+                      : copy.notInstalled}
                 </small>
               </div>
               <div className="chrome-integration-actions">
@@ -1943,7 +2327,7 @@ function App() {
                   disabled={chromeIntegrationBusy}
                 >
                   <Cable />
-                  <span>Register bridge</span>
+                  <span>{copy.registerBridge}</span>
                 </button>
                 <button
                   className="secondary-button"
@@ -1952,7 +2336,7 @@ function App() {
                   disabled={chromeIntegrationBusy || chromeIntegration?.state !== 'installed'}
                 >
                   {chromeIntegrationBusy ? <Loader2 className="spin" /> : <RefreshCw />}
-                  <span>Test desktop bridge</span>
+                  <span>{copy.testDesktopBridge}</span>
                 </button>
                 <button
                   className="secondary-button"
@@ -1961,16 +2345,13 @@ function App() {
                   disabled={chromeIntegrationBusy || chromeIntegration?.state === 'notInstalled'}
                 >
                   <Unplug />
-                  <span>Remove bridge</span>
+                  <span>{copy.removeBridge}</span>
                 </button>
                 {chromeIntegrationMessage && <span>{chromeIntegrationMessage}</span>}
               </div>
               <div className="chrome-extension-steps">
-                <strong>Chrome extension is a separate step</strong>
-                <span>
-                  Open <code>chrome://extensions</code>, enable Developer mode, choose Load unpacked,
-                  then select the <code>dist-extension</code> folder.
-                </span>
+                <strong>{copy.chromeExtensionSeparate}</strong>
+                <span>{copy.chromeExtensionSteps}</span>
               </div>
             </section>
           </div>
@@ -1979,25 +2360,25 @@ function App() {
         {activeTab === 'download' && (
           <section className="download-panel tab-panel">
             <div className="field-block">
-              <label htmlFor="urls">URLs</label>
+              <label htmlFor="urls">{copy.urls}</label>
               <textarea
                 id="urls"
                 value={urlsText}
                 onChange={(event) => setUrlsText(event.target.value)}
-                placeholder="Paste one or more video, playlist, or audio URLs..."
+                placeholder={copy.urlsPlaceholder}
                 spellCheck={false}
               />
             </div>
 
             <div className="preview-actions">
-              <span>{metadata.length > 0 ? `${metadata.length} preview ready` : 'Run preview before downloading protected links.'}</span>
+              <span>{metadata.length > 0 ? copy.previewReady(metadata.length) : copy.runPreviewFirst}</span>
             </div>
 
             {(hasBilibiliChannelUrl || hasTikTokChannelUrl) && (
               <div className="notice notice-soft">
                 <ShieldAlert />
                 <span>
-                  Channel/profile pages are previewed in limited mode to avoid endless loading. You can still download the full channel, but preview only loads the first batch of items.
+                  {copy.channelPreviewLimited}
                 </span>
               </div>
             )}
@@ -2010,20 +2391,20 @@ function App() {
             )}
 
             {metadata.length > 0 && (
-              <section className="metadata-list" aria-label="Metadata preview">
+              <section className="metadata-list" aria-label={copy.metadataPreview}>
                 <div className="selection-bar">
                   <span>
-                    {selectedMetadata.length}/{metadata.length} selected
+                    {copy.selectedCount(selectedMetadata.length, metadata.length)}
                     {metadata.some((item) => item.playlistCount && item.playlistCount > 1)
-                      ? ' from playlist'
+                      ? copy.selectedFromPlaylist
                       : ''}
                   </span>
                   <div>
                     <button className="secondary-button" type="button" onClick={selectAllPreviews}>
-                      Select all
+                      {copy.selectAll}
                     </button>
                     <button className="secondary-button" type="button" onClick={clearPreviewSelection}>
-                      Select none
+                      {copy.selectNone}
                     </button>
                   </div>
                 </div>
@@ -2041,6 +2422,7 @@ function App() {
                   onSetBatchFileNameMode={setBatchFileNameMode}
                   onSetBatchOrder={setBatchOrder}
                   onUpdateItem={updateBatchItem}
+                  copy={copy}
                 />
                 {metadata.map((item) => (
                   <MetadataCard
@@ -2056,6 +2438,7 @@ function App() {
                     onSaveCover={saveCover}
                     onToggle={togglePreview}
                     onViewCover={viewCover}
+                    copy={copy}
                   />
                 ))}
               </section>
@@ -2070,10 +2453,10 @@ function App() {
         <div className="pane-heading">
           <div>
             <Terminal />
-            <h2>Queue</h2>
+            <h2>{copy.queue}</h2>
             {jobs.length > 0 && (
               <span className="queue-progress">
-                {jobs.filter((job) => job.status === 'completed').length}/{jobs.length} downloaded
+                {copy.downloadedCount(jobs.filter((job) => job.status === 'completed').length, jobs.length)}
               </span>
             )}
           </div>
@@ -2084,12 +2467,12 @@ function App() {
             disabled={metadata.length === 0 && urlsText.trim() === '' && jobs.every((job) => ['queued', 'starting', 'running', 'warning'].includes(job.status))}
           >
             <Trash2 />
-            <span>Clear all</span>
+            <span>{copy.clearAll}</span>
           </button>
         </div>
 
         {jobs.length === 0 ? (
-          <div className="empty-state">No downloads yet.</div>
+          <div className="empty-state">{copy.noDownloads}</div>
         ) : (
           <div className="job-list">
             {jobs.map((job) => (
@@ -2100,29 +2483,30 @@ function App() {
                 onOpen={openOutput}
                 onReveal={revealOutput}
                 onConvert={convertOutput}
+                copy={copy}
               />
             ))}
           </div>
         )}
       </aside>
 
-      <section className="bottom-action-bar" aria-label="Download actions">
+      <section className="bottom-action-bar" aria-label={copy.downloadActions}>
         <div className="bottom-action-summary">
           <strong>
             {metadata.length > 0
-              ? `${selectedMetadata.length}/${metadata.length} selected`
-              : `${urls.length} URL${urls.length === 1 ? '' : 's'} ready`}
+              ? copy.selectedCount(selectedMetadata.length, metadata.length)
+              : copy.urlsReady(urls.length)}
           </strong>
-          <span>{subtitleCheckMessage || chromeIntegrationMessage || downloadDir || 'No output folder selected'}</span>
+          <span>{subtitleCheckMessage || chromeIntegrationMessage || downloadDir || copy.noOutputFolder}</span>
         </div>
         <div className="bottom-action-controls">
           <button className="secondary-button" type="button" onClick={() => setActiveTab('settings')}>
             <FolderOpen />
-            <span>Settings</span>
+            <span>{copy.settings}</span>
           </button>
           <button className="secondary-button" type="button" onClick={refreshMetadata} disabled={checkingMetadata}>
             {checkingMetadata ? <Loader2 className="spin" /> : <RefreshCw />}
-            <span>Preview</span>
+            <span>{copy.preview}</span>
           </button>
           {metadata.some((item) => item.directMediaUrl) && (
             <button
@@ -2132,7 +2516,7 @@ function App() {
               disabled={checkingDirectSubtitles}
             >
               {checkingDirectSubtitles ? <Loader2 className="spin" /> : <FileText />}
-              <span>Check subtitles</span>
+              <span>{copy.checkSubtitles}</span>
             </button>
           )}
           {metadata.some((item) => item.directMediaUrl) && (
@@ -2143,30 +2527,30 @@ function App() {
               disabled={rescanQueueing}
             >
               {rescanQueueing ? <Loader2 className="spin" /> : <RefreshCw />}
-              <span>Re-scan selected</span>
+              <span>{copy.rescanSelected}</span>
             </button>
           )}
           <button className="primary-button" type="button" onClick={startDownload} disabled={startingDownload}>
             <Download />
-            <span>{startingDownload ? 'Starting...' : 'Start download'}</span>
+            <span>{startingDownload ? copy.starting : copy.startDownload}</span>
           </button>
         </div>
       </section>
 
       {coverViewer && (
-        <CoverModal viewer={coverViewer} onClose={() => setCoverViewer(null)} />
+        <CoverModal copy={copy} viewer={coverViewer} onClose={() => setCoverViewer(null)} />
       )}
     </main>
   )
 }
 
-function ToolBadge({ label, tool }: { label: string; tool: ToolStatus }) {
+function ToolBadge({ copy, label, tool }: { copy: AppCopy; label: string; tool: ToolStatus }) {
   return (
     <div className={tool.found ? 'tool-badge ok' : 'tool-badge missing'}>
       <CheckCircle2 />
       <div>
         <strong>{label}</strong>
-        <span>{tool.version || tool.error || 'Not found'}</span>
+        <span>{tool.version || tool.error || copy.notFound}</span>
       </div>
     </div>
   )
@@ -2194,6 +2578,7 @@ function SegmentButton({
 
 function CookieProfileCard({
   busy,
+  copy,
   platformKey,
   profile,
   status,
@@ -2204,6 +2589,7 @@ function CookieProfileCard({
   onValidate,
 }: {
   busy: boolean
+  copy: AppCopy
   platformKey: PlatformKey
   profile: CookieProfile
   status?: CookieFileStatus
@@ -2223,29 +2609,29 @@ function CookieProfileCard({
           <strong>{config.label}</strong>
           <span>{config.hosts.join(', ')}</span>
         </div>
-        <small>{ready ? 'Ready' : 'Needs session'}</small>
+        <small>{ready ? copy.ready : copy.needsSession}</small>
       </div>
 
       <div className="segmented">
         <SegmentButton active={profile.mode === 'none'} onClick={() => onChange({ mode: 'none' })}>
-          None
+          {copy.none}
         </SegmentButton>
         <SegmentButton active={profile.mode === 'chrome'} onClick={() => onChange({ mode: 'chrome' })}>
-          Chrome
+          {copy.chrome}
         </SegmentButton>
         <SegmentButton active={profile.mode === 'manual'} onClick={() => onChange({ mode: 'manual' })}>
-          Manual
+          {copy.manual}
         </SegmentButton>
       </div>
 
       <div className="cookie-file-row">
         <button className="path-button cookie-file" type="button" onClick={onImport} disabled={busy}>
           {busy ? <Loader2 className="spin" /> : <Upload />}
-          <span>{profile.manualCookiePath || `Import ${config.label} cookies.txt`}</span>
+          <span>{profile.manualCookiePath || copy.importCookies(config.label)}</span>
         </button>
         <button className="secondary-button" type="button" onClick={onExport} disabled={busy}>
           <Download />
-          <span>Export from Chrome</span>
+          <span>{copy.exportFromChrome}</span>
         </button>
       </div>
 
@@ -2253,18 +2639,18 @@ function CookieProfileCard({
         <div className="cookie-manager-actions">
           <button className="secondary-button" type="button" onClick={onValidate} disabled={busy}>
             <CheckCircle2 />
-            <span>Validate</span>
+            <span>{copy.validate}</span>
           </button>
           <button className="secondary-button danger" type="button" onClick={onDelete} disabled={busy}>
             <Trash2 />
-            <span>Delete</span>
+            <span>{copy.delete}</span>
           </button>
         </div>
       )}
 
       {status && (
         <div className={status.valid ? 'cookie-status valid' : 'cookie-status invalid'}>
-          <strong>{status.valid ? 'Valid cookie file' : 'Invalid cookie file'}</strong>
+          <strong>{status.valid ? copy.validCookieFile : copy.invalidCookieFile}</strong>
           <span>
             {status.cookieCount} cookies · {formatBytes(status.fileSize)}
             {status.modifiedAt ? ` · ${new Date(status.modifiedAt * 1000).toLocaleString()}` : ''}
@@ -2279,6 +2665,7 @@ function BatchOrganizer({
   aiReady,
   batchFileNameMode,
   batchOrder,
+  copy,
   isOrganizing,
   series,
   selectedKeys,
@@ -2293,6 +2680,7 @@ function BatchOrganizer({
   aiReady: boolean
   batchFileNameMode: BatchFileNameMode
   batchOrder: BatchOrderMode
+  copy: AppCopy
   isOrganizing: boolean
   series: OrganizedSeries[]
   selectedKeys: Set<string>
@@ -2317,7 +2705,7 @@ function BatchOrganizer({
     }.mp4`
     : batchFileNameMode === 'episodeOnly'
       ? '001.mp4'
-      : 'Series Title - EP001 - Episode Title.mp4'
+      : `${copy.series} Title - EP001 - ${copy.title}.mp4`
 
   async function copyAiPrompt() {
     const prompt = buildBatchAiPrompt(series)
@@ -2327,38 +2715,36 @@ function BatchOrganizer({
   }
 
   return (
-    <section className="batch-organizer" aria-label="Batch organizer">
+    <section className="batch-organizer" aria-label={copy.batchOrganizer}>
       <div className="batch-organizer-heading">
         <div>
-          <strong>Batch organizer</strong>
-          <span>
-            {series.length} series group{series.length === 1 ? '' : 's'} from {totalItems} preview item{totalItems === 1 ? '' : 's'}
-          </span>
+          <strong>{copy.batchOrganizer}</strong>
+          <span>{copy.batchSummary(series.length, totalItems)}</span>
         </div>
         <div className="batch-heading-actions">
-          <small>Series folders are used for direct TikTok downloads.</small>
+          <small>{copy.seriesFoldersHint}</small>
           <div className="batch-mode-field">
-            <label htmlFor="batch-file-name-mode">Episode file names</label>
+            <label htmlFor="batch-file-name-mode">{copy.episodeFileNames}</label>
             <select
               id="batch-file-name-mode"
               className="select-input"
               value={batchFileNameMode}
               onChange={(event) => onSetBatchFileNameMode(event.target.value as BatchFileNameMode)}
-              title="Direct TikTok file naming"
+              title={copy.directTikTokFileNaming}
             >
-              <option value="episodeOnly">Episode numbers only</option>
-              <option value="fullTitle">Series + episode title</option>
+              <option value="episodeOnly">{copy.episodeNumbersOnly}</option>
+              <option value="fullTitle">{copy.seriesEpisodeTitle}</option>
             </select>
-            <span className="batch-mode-example">Example: {fileNameExample}</span>
+            <span className="batch-mode-example">{copy.example} {fileNameExample}</span>
           </div>
           <select
             className="select-input"
             value={batchOrder}
             onChange={(event) => onSetBatchOrder(event.target.value as BatchOrderMode)}
           >
-            <option value="asScanned">As scanned</option>
-            <option value="reverse">Reverse order</option>
-            <option value="episodeNumber">Sort by episode</option>
+            <option value="asScanned">{copy.asScanned}</option>
+            <option value="reverse">{copy.reverseOrder}</option>
+            <option value="episodeNumber">{copy.sortByEpisode}</option>
           </select>
           <button
             className="secondary-button"
@@ -2367,11 +2753,11 @@ function BatchOrganizer({
             disabled={isOrganizing || !aiReady}
           >
             {isOrganizing ? <Loader2 className="spin" /> : <RefreshCw />}
-            <span>{isOrganizing ? 'Organizing...' : 'Organize with AI'}</span>
+            <span>{isOrganizing ? copy.organizing : copy.organizeWithAi}</span>
           </button>
           <button className="secondary-button" type="button" onClick={copyAiPrompt}>
             <FileText />
-            <span>{copiedPrompt ? 'Copied' : 'Copy AI prompt'}</span>
+            <span>{copiedPrompt ? copy.copied : copy.copyAiPrompt}</span>
           </button>
         </div>
       </div>
@@ -2388,11 +2774,11 @@ function BatchOrganizer({
                   <SeriesCheckbox
                     checked={checked}
                     indeterminate={indeterminate}
-                    label={`Select series ${groupIndex + 1}`}
+                    label={copy.selectSeries(groupIndex + 1)}
                     onChange={() => checked ? onClearSeries(group) : onSelectSeries(group)}
                   />
                   <div className="field-block compact">
-                    <label>Series {groupIndex + 1}</label>
+                    <label>{copy.series} {groupIndex + 1}</label>
                     <input
                       className="text-input"
                       value={group.title}
@@ -2402,15 +2788,15 @@ function BatchOrganizer({
                 </div>
                 <div className="batch-series-actions">
                   <span>
-                    {selectedCount}/{group.items.length} selected
+                    {selectedCount}/{group.items.length} {copy.selected}
                   </span>
                   <button className="secondary-button" type="button" onClick={() => onSelectSeries(group)}>
                     <CheckCircle2 />
-                    <span>Select</span>
+                    <span>{copy.select}</span>
                   </button>
                   <button className="secondary-button" type="button" onClick={() => onClearSeries(group)}>
                     <X />
-                    <span>Clear</span>
+                    <span>{copy.clear}</span>
                   </button>
                 </div>
               </div>
@@ -2424,7 +2810,7 @@ function BatchOrganizer({
                       className={`episode-row${entry.item.isPinned ? ' pinned' : ''}${outOfOrder ? ' out-of-order' : ''}`}
                       key={entry.key}
                     >
-                      <Thumbnail src={entry.item.thumbnail} />
+                      <Thumbnail copy={copy} src={entry.item.thumbnail} />
                       <label>
                         <span>EP</span>
                         <input
@@ -2440,7 +2826,7 @@ function BatchOrganizer({
                         />
                       </label>
                       <label>
-                        <span>Title</span>
+                        <span>{copy.title}</span>
                         <input
                           className="text-input"
                           value={entry.episodeTitle}
@@ -2450,8 +2836,8 @@ function BatchOrganizer({
                         />
                       </label>
                       <small>
-                        {entry.item.isPinned ? 'Pinned - ' : ''}
-                        {outOfOrder ? 'Check order - ' : ''}
+                        {entry.item.isPinned ? copy.pinned : ''}
+                        {outOfOrder ? copy.checkOrder : ''}
                         {entry.outputTitle}
                       </small>
                     </div>
@@ -2459,7 +2845,7 @@ function BatchOrganizer({
                 })}
                 {group.items.length > 8 && (
                   <div className="episode-more">
-                    + {group.items.length - 8} more episode{group.items.length - 8 === 1 ? '' : 's'} in this series
+                    {copy.moreEpisodes(group.items.length - 8)}
                   </div>
                 )}
               </div>
@@ -2472,6 +2858,7 @@ function BatchOrganizer({
 }
 
 function MetadataCard({
+  copy,
   coverPath,
   isSavingCover,
   isSelected,
@@ -2482,6 +2869,7 @@ function MetadataCard({
   isPendingSubtitleRepair,
   isMissingSubtitle,
 }: {
+  copy: AppCopy
   coverPath?: string
   isSavingCover: boolean
   isSelected: boolean
@@ -2501,7 +2889,7 @@ function MetadataCard({
           onChange={() => onToggle(item)}
         />
       </label>
-      <Thumbnail src={item.thumbnail} />
+      <Thumbnail copy={copy} src={item.thumbnail} />
       <div>
         <div className="metadata-heading">
           <strong>{displayPartTitle(item)}</strong>
@@ -2516,16 +2904,16 @@ function MetadataCard({
           </div>
         )}
         <div className="metadata-grid">
-          <span>{item.duration ? formatDuration(item.duration) : 'Duration unknown'}</span>
-          <span>{item.uploader || 'Uploader unknown'}</span>
+          <span>{item.duration ? formatDuration(item.duration) : copy.durationUnknown}</span>
+          <span>{item.uploader || copy.uploaderUnknown}</span>
           <span>{formatResolution(item)}</span>
-          <span>{item.formatCount} formats</span>
+          <span>{copy.formats(item.formatCount)}</span>
         </div>
         <div className="codec-row">
-          <span>V: {formatCodecs(item.videoCodecs)}</span>
-          <span>A: {formatCodecs(item.audioCodecs)}</span>
+          <span>V: {formatCodecs(item.videoCodecs, copy)}</span>
+          <span>A: {formatCodecs(item.audioCodecs, copy)}</span>
         </div>
-        <div className="recommend-row">Recommended: {item.recommendedPreset}</div>
+        <div className="recommend-row">{copy.recommended} {item.recommendedPreset}</div>
         <div className="cover-actions">
           <button
             className="secondary-button"
@@ -2534,7 +2922,7 @@ function MetadataCard({
             disabled={!item.thumbnail && !coverPath}
           >
             <FileText />
-            <span>View cover</span>
+            <span>{copy.viewCover}</span>
           </button>
           <button
             className="secondary-button"
@@ -2543,21 +2931,21 @@ function MetadataCard({
             disabled={!item.thumbnail || isSavingCover}
           >
             {isSavingCover ? <Loader2 className="spin" /> : <Download />}
-            <span>{coverPath ? 'Save again' : 'Save cover'}</span>
+            <span>{coverPath ? copy.saveAgain : copy.saveCover}</span>
           </button>
-          {coverPath && <span className="cover-saved">Saved</span>}
+          {coverPath && <span className="cover-saved">{copy.saved}</span>}
         </div>
         {item.warning && <small>{item.warning}</small>}
         {isPendingSubtitleRepair && (
           <div className="subtitle-repair-warning">
             <ShieldAlert />
-            <span>Subtitle recovery pending after re-scan.</span>
+            <span>{copy.subtitleRecoveryPending}</span>
           </div>
         )}
         {isMissingSubtitle && (
           <div className="subtitle-repair-warning">
             <ShieldAlert />
-            <span>Missing subtitle sidecar. Selected for re-scan.</span>
+            <span>{copy.missingSubtitleSidecar}</span>
           </div>
         )}
       </div>
@@ -2598,9 +2986,11 @@ function SeriesCheckbox({
 }
 
 function CoverModal({
+  copy,
   viewer,
   onClose,
 }: {
+  copy: AppCopy
   viewer: CoverViewer
   onClose: () => void
 }) {
@@ -2621,7 +3011,7 @@ function CoverModal({
             <strong>{viewer.title}</strong>
             {viewer.path && <span>{viewer.path}</span>}
           </div>
-          <button className="modal-close" type="button" onClick={onClose} aria-label="Close cover preview">
+          <button className="modal-close" type="button" onClick={onClose} aria-label={copy.closeCoverPreview}>
             <X />
           </button>
         </div>
@@ -2633,13 +3023,13 @@ function CoverModal({
   )
 }
 
-function Thumbnail({ src }: { src?: string }) {
+function Thumbnail({ src, copy = appCopy.en }: { src?: string; copy?: AppCopy }) {
   const [failed, setFailed] = useState(false)
 
   if (!src || failed) {
     return (
       <div className="thumb-empty">
-        <span>No preview</span>
+        <span>{copy.noPreview}</span>
       </div>
     )
   }
@@ -2648,12 +3038,14 @@ function Thumbnail({ src }: { src?: string }) {
 }
 
 function JobItem({
+  copy,
   job,
   onCancel,
   onOpen,
   onReveal,
   onConvert,
 }: {
+  copy: AppCopy
   job: DownloadJob
   onCancel: (jobId: string) => void
   onOpen: (path: string) => void
@@ -2676,12 +3068,12 @@ function JobItem({
       <div className="job-main">
         <div>
           <strong>{label}</strong>
-          {extraCount > 0 && <span>+ {extraCount} more</span>}
+          {extraCount > 0 && <span>+ {extraCount} {copy.more}</span>}
         </div>
         <small>{job.status}</small>
       </div>
 
-      <JobBatchSummary job={job} />
+      <JobBatchSummary copy={copy} job={job} />
 
       <div className="progress-track">
         <div
@@ -2691,28 +3083,28 @@ function JobItem({
       </div>
 
       <div className="job-meta">
-        <span>{job.percent ? `${job.percent.toFixed(1)}%` : 'Waiting'}</span>
-        <span>{job.speed || 'Speed pending'}</span>
-        <span>{job.eta ? `ETA ${job.eta}` : 'ETA pending'}</span>
+        <span>{job.percent ? `${job.percent.toFixed(1)}%` : copy.waiting}</span>
+        <span>{job.speed || copy.speedPending}</span>
+        <span>{job.eta ? `${copy.eta} ${job.eta}` : copy.etaPending}</span>
       </div>
 
       <div className="job-log-panel">
         <div className="job-log-header">
-          <span>Activity log</span>
-          <small>{visibleLogs.length} lines</small>
+          <span>{copy.activityLog}</span>
+          <small>{visibleLogs.length} {copy.lines}</small>
         </div>
-        <pre>{visibleLogs.slice(-6).join('\n') || statusLabel(job.status)}</pre>
+        <pre>{visibleLogs.slice(-6).join('\n') || statusLabel(job.status, copy)}</pre>
       </div>
 
       {job.mediaReport && (
         <div className={job.mediaReport.quicktimeCompatible ? 'media-report ok' : 'media-report warn'}>
           <strong>
-            {job.mediaReport.videoCodec || 'no video'} / {job.mediaReport.audioCodec || 'no audio'}
+            {job.mediaReport.videoCodec || copy.noVideo} / {job.mediaReport.audioCodec || copy.noAudio}
           </strong>
           <span>
             {job.mediaReport.width && job.mediaReport.height
               ? `${job.mediaReport.width}x${job.mediaReport.height}`
-              : 'Resolution unknown'}{' '}
+              : copy.resolutionUnknown}{' '}
             {job.mediaReport.fileSize ? `- ${formatBytes(job.mediaReport.fileSize)}` : ''}
           </span>
           {job.mediaReport.warning && <small>{job.mediaReport.warning}</small>}
@@ -2723,11 +3115,11 @@ function JobItem({
         <div className="job-actions">
           <button className="secondary-button" type="button" onClick={() => onOpen(job.outputPath!)}>
             <FileText />
-            <span>Open</span>
+            <span>{copy.open}</span>
           </button>
           <button className="secondary-button" type="button" onClick={() => onReveal(job.outputPath!)}>
             <FolderOpen />
-            <span>Folder</span>
+            <span>{copy.folder}</span>
           </button>
           {canConvert && (
             <button
@@ -2737,7 +3129,7 @@ function JobItem({
               disabled={job.converting}
             >
               {job.converting ? <Loader2 className="spin" /> : <RefreshCw />}
-              <span>Convert H.264</span>
+              <span>{copy.convertH264}</span>
             </button>
           )}
         </div>
@@ -2746,20 +3138,20 @@ function JobItem({
       {active && !job.id.startsWith('queued-') && (
         <button className="cancel-button" type="button" onClick={() => onCancel(job.id)}>
           <Square />
-          <span>Cancel</span>
+          <span>{copy.cancel}</span>
         </button>
       )}
     </article>
   )
 }
 
-function JobBatchSummary({ job }: { job: DownloadJob }) {
+function JobBatchSummary({ copy, job }: { copy: AppCopy; job: DownloadJob }) {
   const summary = summarizeJobActivity(job.logs)
   const batchCount = summary.totalItems && summary.currentItem
-    ? `${summary.currentItem}/${summary.totalItems} clips`
+    ? `${summary.currentItem}/${summary.totalItems} ${copy.clips}`
     : job.urls.length > 1
-      ? `${job.urls.length} URLs queued`
-      : 'Single video'
+      ? copy.urlsQueued(job.urls.length)
+      : copy.singleVideo
   const progress =
     summary.totalItems && summary.currentItem
       ? Math.min((summary.currentItem / summary.totalItems) * 100, 100)
@@ -2768,7 +3160,7 @@ function JobBatchSummary({ job }: { job: DownloadJob }) {
     summary.playlistTitle ||
     summary.activeTitle ||
     summary.lastMeaningfulLine ||
-    'Waiting for activity...'
+    copy.waitingForActivity
 
   return (
     <div className="job-batch-summary">
@@ -2777,7 +3169,7 @@ function JobBatchSummary({ job }: { job: DownloadJob }) {
         <span>{sourceLabel}</span>
       </div>
       {progress !== undefined && (
-        <div className="job-batch-track" aria-label="Batch progress">
+        <div className="job-batch-track" aria-label={copy.batchProgress}>
           <div className="job-batch-fill" style={{ width: `${progress}%` }} />
         </div>
       )}
@@ -2785,8 +3177,8 @@ function JobBatchSummary({ job }: { job: DownloadJob }) {
   )
 }
 
-function formatCodecs(codecs: string[]) {
-  return codecs.length > 0 ? codecs.slice(0, 4).join(', ') : 'unknown'
+function formatCodecs(codecs: string[], copy: AppCopy = appCopy.en) {
+  return codecs.length > 0 ? codecs.slice(0, 4).join(', ') : copy.unknown
 }
 
 function appendJobLog(logs: string[], rawLine: string) {
@@ -2817,14 +3209,14 @@ function cleanJobLogLine(line: string) {
   return value
 }
 
-function statusLabel(status: JobStatus) {
-  if (status === 'completed') return 'Download completed.'
-  if (status === 'failed') return 'Download failed.'
-  if (status === 'queued') return 'Waiting to start.'
-  if (status === 'starting') return 'Starting download...'
-  if (status === 'running') return 'Downloading...'
-  if (status === 'canceled') return 'Download canceled.'
-  return 'Working...'
+function statusLabel(status: JobStatus, copy: AppCopy = appCopy.en) {
+  if (status === 'completed') return copy.statusCompleted
+  if (status === 'failed') return copy.statusFailed
+  if (status === 'queued') return copy.statusQueued
+  if (status === 'starting') return copy.statusStarting
+  if (status === 'running') return copy.statusRunning
+  if (status === 'canceled') return copy.statusCanceled
+  return copy.statusWorking
 }
 
 type JobActivitySummary = {
@@ -3365,6 +3757,11 @@ function readBrowserSettings(): AppSettings {
   } catch {
     return defaultSettings
   }
+}
+
+function readSavedLanguage(): AppLanguage {
+  const value = localStorage.getItem('sorevid-language')
+  return value === 'vi' || value === 'en' ? value : 'en'
 }
 
 function normalizeCookieProfiles(settings: AppSettings): Record<string, CookieProfile> {

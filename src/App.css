@@ -180,6 +180,22 @@ body {
   flex: 0 0 auto;
 }
 
+.language-switcher {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.language-switcher .select-input {
+  width: 72px;
+  min-height: 40px;
+  padding: 0 8px;
+}
+
 .page-tabs {
   display: flex;
   align-items: center;
