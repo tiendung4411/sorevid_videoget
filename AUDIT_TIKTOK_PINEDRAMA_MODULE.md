@@ -4,7 +4,7 @@ Updated: 2026-06-28
 
 ## Summary
 
-This audit documents the TikTok / PineDrama work added to Sorevid Downloader.
+This audit documents the TikTok / PineDrama work added to SOREVID VideoGET.
 
 The original issue was that some TikTok profiles, especially Short Drama / PineDrama style profiles, expose a normal desktop profile grid but return zero items through the regular `yt-dlp` profile extractor. Mobile TikTok shows those same accounts as drama/series pages with episodes, film titles, and playlist-like rows. Because `yt-dlp` cannot access those episode lists through the normal profile extractor, Sorevid now uses the user's active Chrome session to scan and resolve TikTok video pages.
 
@@ -536,4 +536,3 @@ Expected:
 - Extension TypeScript builds.
 - App TypeScript builds.
 - Rust tests pass.
-

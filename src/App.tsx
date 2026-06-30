@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import backgroundVideo from './assets/background.mp4'
+import videoGetLogo from './assets/icons/videoget.png'
 import errorNotificationSound from './assets/sounds/error.wav'
 import normalNotificationSound from './assets/sounds/normal.wav'
 import successfulNotificationSound from './assets/sounds/succesful.wav'
@@ -282,6 +283,34 @@ type CookieFileStatus = {
   message: string
 }
 
+type PendingSubtitleRepair = {
+  sourceUrl: string
+  addedAt: number
+}
+
+type DirectSubtitleCheckItem = {
+  sourceUrl: string
+  pageUrl: string
+  title?: string
+  episodeNumber?: number
+  mediaPath?: string
+  expectedPaths: string[]
+  presentPaths: string[]
+  missingPaths: string[]
+  mediaFound: boolean
+  hasSubtitles: boolean
+  hasMissingRequired: boolean
+}
+
+type DirectSubtitleCheckResult = {
+  total: number
+  checked: number
+  missing: number
+  mediaNotFound: number
+  noSubtitles: number
+  items: DirectSubtitleCheckItem[]
+}
+
 const defaultTools: ToolVersions = {
   ytDlp: { found: false },
   ffmpeg: { found: false },
@@ -415,6 +444,7 @@ function isTikTokChannelUrl(url: string) {
 }
 
 function App() {
+  const [bootLoading, setBootLoading] = useState(true)
   const [urlsText, setUrlsText] = useState('')
   const [downloadDir, setDownloadDir] = useState('')
   const [downloadPreset, setDownloadPreset] = useState<DownloadPreset>('compatibleMp4')
@@ -447,12 +477,20 @@ function App() {
   const [chromeIntegration, setChromeIntegration] = useState<ChromeIntegrationStatus | null>(null)
   const [chromeIntegrationBusy, setChromeIntegrationBusy] = useState(false)
   const [chromeIntegrationMessage, setChromeIntegrationMessage] = useState('')
+  const [pendingSubtitleRepairs, setPendingSubtitleRepairs] = useState<PendingSubtitleRepair[]>([])
+  const [rescanQueueing, setRescanQueueing] = useState(false)
+  const [checkingDirectSubtitles, setCheckingDirectSubtitles] = useState(false)
+  const [subtitleCheckMessage, setSubtitleCheckMessage] = useState('')
+  const [subtitleCheckMissingUrls, setSubtitleCheckMissingUrls] = useState<Set<string>>(new Set())
   const [cookieStatuses, setCookieStatuses] = useState<Record<string, CookieFileStatus>>({})
   const [cookieBusyPlatform, setCookieBusyPlatform] = useState('')
   const [cookieMessage, setCookieMessage] = useState('')
   const [organizingBatch, setOrganizingBatch] = useState(false)
   const audioNotificationsRef = useRef(audioNotifications)
   const jobAudioStateRef = useRef<Map<string, JobAudioState>>(new Map())
+  const pendingSubtitleRepairsRef = useRef<PendingSubtitleRepair[]>([])
+  const downloadDirRef = useRef('')
+  const batchFileNameModeRef = useRef<BatchFileNameMode>('episodeOnly')
 
   const urls = useMemo(
     () => collectUrlsFromText(urlsText),
@@ -499,6 +537,15 @@ function App() {
 
   const effectiveDanmakuFormat = hasBilibiliUrl ? danmakuFormat : 'none'
 
+  pendingSubtitleRepairsRef.current = pendingSubtitleRepairs
+  downloadDirRef.current = downloadDir
+  batchFileNameModeRef.current = batchFileNameMode
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setBootLoading(false), 2000)
+    return () => window.clearTimeout(timer)
+  }, [])
+
   useEffect(() => {
     audioNotificationsRef.current = audioNotifications
     if (audioNotifications) {
@@ -534,6 +581,33 @@ function App() {
               ? `${resolvedPreviews.length} resolved TikTok item${resolvedPreviews.length === 1 ? '' : 's'} received from Chrome.`
               : `${imported.urls.length} URL${imported.urls.length === 1 ? '' : 's'} received from Chrome.`,
           )
+
+          const pendingRepairs = pendingSubtitleRepairsRef.current
+          const currentDownloadDir = downloadDirRef.current
+          if (resolvedPreviews.length > 0 && currentDownloadDir && pendingRepairs.length > 0) {
+            const repairItems = resolvedPreviews.filter((preview) =>
+              pendingRepairs.some((pending) => pending.sourceUrl === preview.sourceUrl),
+            )
+            if (repairItems.length > 0) {
+              const directRepairItems = repairItems
+                .map((item) => directDownloadItemFromMetadata(item, undefined, batchFileNameModeRef.current))
+                .filter((item) => item.subtitles && item.subtitles.length > 0)
+              if (directRepairItems.length > 0) {
+                invoke<string>('retry_missing_direct_subtitles', {
+                  request: {
+                    items: directRepairItems,
+                    downloadDir: currentDownloadDir,
+                  },
+                })
+                  .then((message) => setChromeIntegrationMessage(message))
+                  .catch((err) => setError(String(err)))
+              }
+              const repairedUrls = new Set(repairItems.map((item) => item.sourceUrl))
+              setPendingSubtitleRepairs((current) =>
+                current.filter((pending) => !repairedUrls.has(pending.sourceUrl)),
+              )
+            }
+          }
         }
       } catch (err) {
         setError(String(err))
@@ -892,9 +966,9 @@ function App() {
       const profile = platformKey
         ? getCookieProfile(cookieProfiles, platformKey)
         : {
-            mode: cookieMode,
-            manualCookiePath: cookieMode === 'manual' ? manualCookiePath : '',
-          }
+          mode: cookieMode,
+          manualCookiePath: cookieMode === 'manual' ? manualCookiePath : '',
+        }
       const groupKey = `${platformKey || 'other'}::${profile.mode}::${profile.manualCookiePath}`
       const existing = groups.get(groupKey)
       if (existing) {
@@ -1011,14 +1085,14 @@ function App() {
     const directSourceEntries = selectedOrganizedEntries.length > 0
       ? selectedOrganizedEntries
       : selectedItems.map((item) => ({
-          item,
-          key: previewKey(item),
-          seriesTitle: item.uploader || 'TikTok Series',
-          episodeNumber: 1,
-          episodeTitle: displayPartTitle(item),
-          suggested: {},
-          outputTitle: displayPartTitle(item),
-        }))
+        item,
+        key: previewKey(item),
+        seriesTitle: item.uploader || 'TikTok Series',
+        episodeNumber: 1,
+        episodeTitle: displayPartTitle(item),
+        suggested: {},
+        outputTitle: displayPartTitle(item),
+      }))
     const directItems = directSourceEntries
       .filter((entry) => entry.item.directMediaUrl)
       .map((entry) =>
@@ -1065,12 +1139,12 @@ function App() {
 
     const directOptimisticJob = directItems.length > 0
       ? {
-          id: `queued-${Date.now()}-direct`,
-          urls: directItems.map((item) => item.sourceUrl),
-          titles: directItems.map((item) => item.title || item.sourceUrl),
-          status: 'queued' as JobStatus,
-          logs: [`Queued ${directItems.length} direct TikTok item${directItems.length === 1 ? '' : 's'} from Chrome.`],
-        }
+        id: `queued-${Date.now()}-direct`,
+        urls: directItems.map((item) => item.sourceUrl),
+        titles: directItems.map((item) => item.title || item.sourceUrl),
+        status: 'queued' as JobStatus,
+        logs: [`Queued ${directItems.length} direct TikTok item${directItems.length === 1 ? '' : 's'} from Chrome.`],
+      }
       : undefined
     const regularOptimisticJobs = groupedRequest.groups.map((group, index) => ({
       id: `queued-${Date.now()}-${index}`,
@@ -1088,17 +1162,17 @@ function App() {
     try {
       const directResult = directItems.length > 0
         ? await Promise.allSettled([
-            withTimeout(
-              invoke<string>('start_direct_download', {
-                request: {
-                  items: directItems,
-                  downloadDir,
-                },
-              }),
-              15_000,
-              'Direct TikTok download did not start within 15 seconds. Restart the app so the updated backend command is loaded.',
-            ),
-          ])
+          withTimeout(
+            invoke<string>('start_direct_download', {
+              request: {
+                items: directItems,
+                downloadDir,
+              },
+            }),
+            15_000,
+            'Direct TikTok download did not start within 15 seconds. Restart the app so the updated backend command is loaded.',
+          ),
+        ])
         : []
       const regularResults = await Promise.allSettled(
         groupedRequest.groups.map((group) =>
@@ -1131,10 +1205,10 @@ function App() {
           return result.status === 'fulfilled'
             ? { ...job, id: result.value, status: 'starting' }
             : {
-                ...job,
-                status: 'failed',
-                logs: [...job.logs, String(result.reason)],
-              }
+              ...job,
+              status: 'failed',
+              logs: [...job.logs, String(result.reason)],
+            }
         }),
       )
       const failures = results.filter((result) => result.status === 'rejected')
@@ -1148,10 +1222,10 @@ function App() {
         currentJobs.map((job) =>
           optimisticJobs.some((queued) => queued.id === job.id)
             ? {
-                ...job,
-                status: 'failed',
-                logs: [...job.logs, String(err)],
-              }
+              ...job,
+              status: 'failed',
+              logs: [...job.logs, String(err)],
+            }
             : job,
         ),
       )
@@ -1227,12 +1301,12 @@ function App() {
         currentJobs.map((job) =>
           job.id === jobId
             ? {
-                ...job,
-                converting: false,
-                outputPath: report.path,
-                mediaReport: report,
-                logs: [...job.logs, `Converted file: ${report.path}`],
-              }
+              ...job,
+              converting: false,
+              outputPath: report.path,
+              mediaReport: report,
+              logs: [...job.logs, `Converted file: ${report.path}`],
+            }
             : job,
         ),
       )
@@ -1255,31 +1329,114 @@ function App() {
     setCoverPaths({})
     setUrlsText('')
     setError('')
+    setSubtitleCheckMessage('')
+    setSubtitleCheckMissingUrls(new Set())
     setJobs((currentJobs) =>
       currentJobs.filter((job) => ['queued', 'starting', 'running', 'warning'].includes(job.status)),
     )
   }
 
+  async function checkDirectSubtitles() {
+    setError('')
+    setSubtitleCheckMessage('')
+    setSubtitleCheckMissingUrls(new Set())
+    const directEntries = organizedBatch
+      .flatMap((series) => series.items)
+      .filter((entry) => entry.item.directMediaUrl)
+    if (directEntries.length === 0) {
+      setError('Preview or import direct TikTok items before checking subtitles.')
+      return
+    }
+    if (!downloadDir) {
+      setError('Choose a download folder before checking subtitles.')
+      return
+    }
+
+    setCheckingDirectSubtitles(true)
+    setSubtitleCheckMessage(`Checking subtitles for ${directEntries.length} direct item${directEntries.length === 1 ? '' : 's'}...`)
+    try {
+      const result = await invoke<DirectSubtitleCheckResult>('check_direct_subtitles', {
+        request: {
+          items: directEntries.map((entry) =>
+            directDownloadItemFromMetadata(entry.item, entry, batchFileNameMode),
+          ),
+          downloadDir,
+        },
+      })
+      const missingItems = result.items.filter((item) => item.hasMissingRequired)
+      const missingUrls = new Set(missingItems.map((item) => item.sourceUrl))
+      setSubtitleCheckMissingUrls(missingUrls)
+
+      if (missingItems.length > 0) {
+        setSelectedPreviewKeys(
+          new Set(
+            metadata
+              .filter((item) => missingUrls.has(item.sourceUrl))
+              .map((item) => previewKey(item)),
+          ),
+        )
+        const examples = missingItems
+          .slice(0, 3)
+          .map((item) =>
+            item.episodeNumber
+              ? `EP${padEpisodeNumber(item.episodeNumber)}`
+              : item.title || item.sourceUrl,
+          )
+          .join(', ')
+        setSubtitleCheckMessage(
+          `Missing subtitles on ${missingItems.length} item${missingItems.length === 1 ? '' : 's'} (${examples}${missingItems.length > 3 ? ', ...' : ''}). Selected only those items for re-scan.`,
+        )
+        return
+      }
+
+      const extra =
+        result.mediaNotFound > 0
+          ? ` ${result.mediaNotFound} media file${result.mediaNotFound === 1 ? '' : 's'} were not found in the download folder.`
+          : ''
+      setSubtitleCheckMessage(
+        `Subtitle check passed for ${result.checked} downloaded item${result.checked === 1 ? '' : 's'}.${extra}`,
+      )
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setCheckingDirectSubtitles(false)
+    }
+  }
+
   async function rescanSelectedTikTokItems() {
     setError('')
+    setRescanQueueing(true)
     const selectedOrganizedEntries = organizedBatch
       .flatMap((series) => series.items)
       .filter((entry) => selectedPreviewKeys.has(entry.key) && entry.item.directMediaUrl)
     if (selectedOrganizedEntries.length === 0) {
       setError('Select at least one resolved TikTok item to re-scan.')
+      setRescanQueueing(false)
       return
     }
     try {
-      const message = await invoke<string>('queue_tiktok_rescan', {
+      await invoke<string>('queue_tiktok_rescan', {
         request: {
           items: selectedOrganizedEntries.map((entry) =>
             directDownloadItemFromMetadata(entry.item, entry, batchFileNameMode),
           ),
         },
       })
-      setChromeIntegrationMessage(`${message} Keep a TikTok tab open so the extension can refresh them.`)
+      const now = Date.now()
+      setPendingSubtitleRepairs((current) => [
+        ...current,
+        ...selectedOrganizedEntries.map((entry) => ({
+          sourceUrl: entry.item.sourceUrl,
+          addedAt: now,
+        })),
+      ])
+      setChromeIntegrationMessage(
+        `Queued ${selectedOrganizedEntries.length} TikTok item${selectedOrganizedEntries.length === 1 ? '' : 's'} for subtitle URL refresh. Open the SOREVID VideoGET Chrome extension on a TikTok tab to run it now.`,
+      )
     } catch (err) {
       setError(String(err))
+    } finally {
+      setRescanQueueing(false)
     }
   }
 
@@ -1488,11 +1645,32 @@ function App() {
       <video className="app-bg-video" autoPlay loop muted playsInline>
         <source src={backgroundVideo} type="video/mp4" />
       </video>
+      {bootLoading && (
+        <div className="app-loading-screen" role="status" aria-live="polite">
+          <div className="loading-logo-shell">
+            <img className="loading-logo" src={videoGetLogo} alt="SOREVID VideoGET" />
+          </div>
+          <div className="loading-wordmark">
+            <span>SOREVID</span>
+            <strong>VideoGET</strong>
+          </div>
+          <div className="loading-progress" aria-hidden="true" />
+        </div>
+      )}
       <section className="workspace">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">yt-dlp desktop client</p>
-            <h1>SOREVID Downloader</h1>
+          <div className="brand-block">
+            <div className="brand-title-row">
+              <div className="brand-mark" aria-hidden="true">
+                <img className="brand-logo" src={videoGetLogo} alt="" />
+              </div>
+              <div className="brand-copy">
+                <h1 className="brand-title">
+                  <span className="brand-title-primary">SOREVID</span>
+                  <span className="brand-title-secondary">VideoGet</span>
+                </h1>
+              </div>
+            </div>
           </div>
           <div className="topbar-actions">
             <nav className="page-tabs" aria-label="App sections">
@@ -1738,142 +1916,153 @@ function App() {
             </div>
 
             <section className="chrome-integration-panel" aria-label="Chrome integration">
-          <div className="chrome-integration-heading">
-            <div className={`integration-icon ${chromeIntegration?.state || 'unknown'}`}>
-              <Cable />
-            </div>
-            <div>
-              <strong>Chrome Integration Bridge</strong>
-              <span>
-                {chromeIntegration?.message ||
-                  'Register the desktop bridge, then load the extension separately in Chrome.'}
-              </span>
-            </div>
-            <small className={chromeIntegration?.state || 'unknown'}>
-              {chromeIntegration?.state === 'installed'
-                ? 'Installed'
-                : chromeIntegration?.state === 'invalid'
-                  ? 'Invalid'
-                  : 'Not installed'}
-            </small>
-          </div>
-          <div className="chrome-integration-actions">
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => changeChromeIntegration('install')}
-              disabled={chromeIntegrationBusy}
-            >
-              <Cable />
-              <span>Register bridge</span>
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => changeChromeIntegration('test')}
-              disabled={chromeIntegrationBusy || chromeIntegration?.state !== 'installed'}
-            >
-              {chromeIntegrationBusy ? <Loader2 className="spin" /> : <RefreshCw />}
-              <span>Test desktop bridge</span>
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => changeChromeIntegration('remove')}
-              disabled={chromeIntegrationBusy || chromeIntegration?.state === 'notInstalled'}
-            >
-              <Unplug />
-              <span>Remove bridge</span>
-            </button>
-            {chromeIntegrationMessage && <span>{chromeIntegrationMessage}</span>}
-          </div>
-          <div className="chrome-extension-steps">
-            <strong>Chrome extension is a separate step</strong>
-            <span>
-              Open <code>chrome://extensions</code>, enable Developer mode, choose Load unpacked,
-              then select the <code>dist-extension</code> folder.
-            </span>
-          </div>
+              <div className="chrome-integration-heading">
+                <div className={`integration-icon ${chromeIntegration?.state || 'unknown'}`}>
+                  <Cable />
+                </div>
+                <div>
+                  <strong>Chrome Integration Bridge</strong>
+                  <span>
+                    {chromeIntegration?.message ||
+                      'Register the desktop bridge, then load the extension separately in Chrome.'}
+                  </span>
+                </div>
+                <small className={chromeIntegration?.state || 'unknown'}>
+                  {chromeIntegration?.state === 'installed'
+                    ? 'Installed'
+                    : chromeIntegration?.state === 'invalid'
+                      ? 'Invalid'
+                      : 'Not installed'}
+                </small>
+              </div>
+              <div className="chrome-integration-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => changeChromeIntegration('install')}
+                  disabled={chromeIntegrationBusy}
+                >
+                  <Cable />
+                  <span>Register bridge</span>
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => changeChromeIntegration('test')}
+                  disabled={chromeIntegrationBusy || chromeIntegration?.state !== 'installed'}
+                >
+                  {chromeIntegrationBusy ? <Loader2 className="spin" /> : <RefreshCw />}
+                  <span>Test desktop bridge</span>
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => changeChromeIntegration('remove')}
+                  disabled={chromeIntegrationBusy || chromeIntegration?.state === 'notInstalled'}
+                >
+                  <Unplug />
+                  <span>Remove bridge</span>
+                </button>
+                {chromeIntegrationMessage && <span>{chromeIntegrationMessage}</span>}
+              </div>
+              <div className="chrome-extension-steps">
+                <strong>Chrome extension is a separate step</strong>
+                <span>
+                  Open <code>chrome://extensions</code>, enable Developer mode, choose Load unpacked,
+                  then select the <code>dist-extension</code> folder.
+                </span>
+              </div>
             </section>
           </div>
         )}
 
         {activeTab === 'download' && (
-        <section className="download-panel tab-panel">
-          <div className="field-block">
-            <label htmlFor="urls">URLs</label>
-            <textarea
-              id="urls"
-              value={urlsText}
-              onChange={(event) => setUrlsText(event.target.value)}
-              placeholder="Paste one or more video, playlist, or audio URLs..."
-              spellCheck={false}
-            />
-          </div>
-
-          <div className="preview-actions">
-            <span>{metadata.length > 0 ? `${metadata.length} preview ready` : 'Run preview before downloading protected links.'}</span>
-          </div>
-
-          {(hasBilibiliChannelUrl || hasTikTokChannelUrl) && (
-            <div className="notice notice-soft">
-              <ShieldAlert />
-              <span>
-                Channel/profile pages are previewed in limited mode to avoid endless loading. You can still download the full channel, but preview only loads the first batch of items.
-              </span>
-            </div>
-          )}
-
-          {metadata.length > 0 && (
-            <section className="metadata-list" aria-label="Metadata preview">
-              <div className="selection-bar">
-                <span>
-                  {selectedMetadata.length}/{metadata.length} selected
-                  {metadata.some((item) => item.playlistCount && item.playlistCount > 1)
-                    ? ' from playlist'
-                    : ''}
-                </span>
-                <div>
-                  <button className="secondary-button" type="button" onClick={selectAllPreviews}>
-                    Select all
-                  </button>
-                  <button className="secondary-button" type="button" onClick={clearPreviewSelection}>
-                    Select none
-                  </button>
-                </div>
-              </div>
-              <BatchOrganizer
-                aiReady={Boolean(geminiApiKey.trim())}
-                batchFileNameMode={batchFileNameMode}
-                batchOrder={batchOrder}
-                isOrganizing={organizingBatch}
-                series={organizedBatch}
-                selectedKeys={selectedPreviewKeys}
-                onClearSeries={clearSeriesSelection}
-                onOrganizeWithAi={organizeBatchWithAi}
-                onRenameSeries={renameBatchSeries}
-                onSelectSeries={selectSeries}
-                onSetBatchFileNameMode={setBatchFileNameMode}
-                onSetBatchOrder={setBatchOrder}
-                onUpdateItem={updateBatchItem}
+          <section className="download-panel tab-panel">
+            <div className="field-block">
+              <label htmlFor="urls">URLs</label>
+              <textarea
+                id="urls"
+                value={urlsText}
+                onChange={(event) => setUrlsText(event.target.value)}
+                placeholder="Paste one or more video, playlist, or audio URLs..."
+                spellCheck={false}
               />
-              {metadata.map((item) => (
-                <MetadataCard
-                  key={item.url}
-                  coverPath={coverPaths[item.url]}
-                  isSavingCover={savingCoverUrl === item.url}
-                  isSelected={selectedPreviewKeys.has(previewKey(item))}
-                  item={item}
-                  onSaveCover={saveCover}
-                  onToggle={togglePreview}
-                  onViewCover={viewCover}
-                />
-              ))}
-            </section>
-          )}
+            </div>
 
-          {error && <div className="error-line">{error}</div>}
-        </section>
+            <div className="preview-actions">
+              <span>{metadata.length > 0 ? `${metadata.length} preview ready` : 'Run preview before downloading protected links.'}</span>
+            </div>
+
+            {(hasBilibiliChannelUrl || hasTikTokChannelUrl) && (
+              <div className="notice notice-soft">
+                <ShieldAlert />
+                <span>
+                  Channel/profile pages are previewed in limited mode to avoid endless loading. You can still download the full channel, but preview only loads the first batch of items.
+                </span>
+              </div>
+            )}
+
+            {subtitleCheckMessage && (
+              <div className={subtitleCheckMissingUrls.size > 0 ? 'notice' : 'notice notice-soft'}>
+                <FileText />
+                <span>{subtitleCheckMessage}</span>
+              </div>
+            )}
+
+            {metadata.length > 0 && (
+              <section className="metadata-list" aria-label="Metadata preview">
+                <div className="selection-bar">
+                  <span>
+                    {selectedMetadata.length}/{metadata.length} selected
+                    {metadata.some((item) => item.playlistCount && item.playlistCount > 1)
+                      ? ' from playlist'
+                      : ''}
+                  </span>
+                  <div>
+                    <button className="secondary-button" type="button" onClick={selectAllPreviews}>
+                      Select all
+                    </button>
+                    <button className="secondary-button" type="button" onClick={clearPreviewSelection}>
+                      Select none
+                    </button>
+                  </div>
+                </div>
+                <BatchOrganizer
+                  aiReady={Boolean(geminiApiKey.trim())}
+                  batchFileNameMode={batchFileNameMode}
+                  batchOrder={batchOrder}
+                  isOrganizing={organizingBatch}
+                  series={organizedBatch}
+                  selectedKeys={selectedPreviewKeys}
+                  onClearSeries={clearSeriesSelection}
+                  onOrganizeWithAi={organizeBatchWithAi}
+                  onRenameSeries={renameBatchSeries}
+                  onSelectSeries={selectSeries}
+                  onSetBatchFileNameMode={setBatchFileNameMode}
+                  onSetBatchOrder={setBatchOrder}
+                  onUpdateItem={updateBatchItem}
+                />
+                {metadata.map((item) => (
+                  <MetadataCard
+                    key={item.url}
+                    coverPath={coverPaths[item.url]}
+                    isSavingCover={savingCoverUrl === item.url}
+                    isSelected={selectedPreviewKeys.has(previewKey(item))}
+                    isPendingSubtitleRepair={pendingSubtitleRepairs.some(
+                      (pending) => pending.sourceUrl === item.sourceUrl,
+                    )}
+                    isMissingSubtitle={subtitleCheckMissingUrls.has(item.sourceUrl)}
+                    item={item}
+                    onSaveCover={saveCover}
+                    onToggle={togglePreview}
+                    onViewCover={viewCover}
+                  />
+                ))}
+              </section>
+            )}
+
+            {error && <div className="error-line">{error}</div>}
+          </section>
         )}
       </section>
 
@@ -1924,7 +2113,7 @@ function App() {
               ? `${selectedMetadata.length}/${metadata.length} selected`
               : `${urls.length} URL${urls.length === 1 ? '' : 's'} ready`}
           </strong>
-          <span>{downloadDir || 'No output folder selected'}</span>
+          <span>{subtitleCheckMessage || chromeIntegrationMessage || downloadDir || 'No output folder selected'}</span>
         </div>
         <div className="bottom-action-controls">
           <button className="secondary-button" type="button" onClick={() => setActiveTab('settings')}>
@@ -1936,8 +2125,24 @@ function App() {
             <span>Preview</span>
           </button>
           {metadata.some((item) => item.directMediaUrl) && (
-            <button className="secondary-button" type="button" onClick={rescanSelectedTikTokItems}>
-              <RefreshCw />
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={checkDirectSubtitles}
+              disabled={checkingDirectSubtitles}
+            >
+              {checkingDirectSubtitles ? <Loader2 className="spin" /> : <FileText />}
+              <span>Check subtitles</span>
+            </button>
+          )}
+          {metadata.some((item) => item.directMediaUrl) && (
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={rescanSelectedTikTokItems}
+              disabled={rescanQueueing}
+            >
+              {rescanQueueing ? <Loader2 className="spin" /> : <RefreshCw />}
               <span>Re-scan selected</span>
             </button>
           )}
@@ -2104,6 +2309,15 @@ function BatchOrganizer({
   if (series.length === 0) return null
 
   const totalItems = series.reduce((sum, group) => sum + group.items.length, 0)
+  const sampleEntry = series[0]?.items[0]
+  const fileNameExample = sampleEntry
+    ? `${batchFileNameMode === 'episodeOnly'
+      ? String(sampleEntry.episodeNumber)
+      : sampleEntry.outputTitle
+    }.mp4`
+    : batchFileNameMode === 'episodeOnly'
+      ? '001.mp4'
+      : 'Series Title - EP001 - Episode Title.mp4'
 
   async function copyAiPrompt() {
     const prompt = buildBatchAiPrompt(series)
@@ -2123,15 +2337,20 @@ function BatchOrganizer({
         </div>
         <div className="batch-heading-actions">
           <small>Series folders are used for direct TikTok downloads.</small>
-          <select
-            className="select-input"
-            value={batchFileNameMode}
-            onChange={(event) => onSetBatchFileNameMode(event.target.value as BatchFileNameMode)}
-            title="Direct TikTok file naming"
-          >
-            <option value="episodeOnly">Files: 1.mp4, 2.mp4</option>
-            <option value="fullTitle">Files: full episode title</option>
-          </select>
+          <div className="batch-mode-field">
+            <label htmlFor="batch-file-name-mode">Episode file names</label>
+            <select
+              id="batch-file-name-mode"
+              className="select-input"
+              value={batchFileNameMode}
+              onChange={(event) => onSetBatchFileNameMode(event.target.value as BatchFileNameMode)}
+              title="Direct TikTok file naming"
+            >
+              <option value="episodeOnly">Episode numbers only</option>
+              <option value="fullTitle">Series + episode title</option>
+            </select>
+            <span className="batch-mode-example">Example: {fileNameExample}</span>
+          </div>
           <select
             className="select-input"
             value={batchOrder}
@@ -2201,42 +2420,43 @@ function BatchOrganizer({
                   const previous = group.items[index - 1]
                   const outOfOrder = Boolean(previous && entry.episodeNumber <= previous.episodeNumber)
                   return (
-                  <div
-                    className={`episode-row${entry.item.isPinned ? ' pinned' : ''}${outOfOrder ? ' out-of-order' : ''}`}
-                    key={entry.key}
-                  >
-                    <Thumbnail src={entry.item.thumbnail} />
-                    <label>
-                      <span>EP</span>
-                      <input
-                        className="number-input"
-                        type="number"
-                        min={1}
-                        value={entry.episodeNumber}
-                        onChange={(event) =>
-                          onUpdateItem(entry.key, {
-                            episodeNumber: Math.max(1, Number(event.target.value) || entry.episodeNumber),
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      <span>Title</span>
-                      <input
-                        className="text-input"
-                        value={entry.episodeTitle}
-                        onChange={(event) =>
-                          onUpdateItem(entry.key, { episodeTitle: event.target.value })
-                        }
-                      />
-                    </label>
-                    <small>
-                      {entry.item.isPinned ? 'Pinned - ' : ''}
-                      {outOfOrder ? 'Check order - ' : ''}
-                      {entry.outputTitle}
-                    </small>
-                  </div>
-                )})}
+                    <div
+                      className={`episode-row${entry.item.isPinned ? ' pinned' : ''}${outOfOrder ? ' out-of-order' : ''}`}
+                      key={entry.key}
+                    >
+                      <Thumbnail src={entry.item.thumbnail} />
+                      <label>
+                        <span>EP</span>
+                        <input
+                          className="number-input"
+                          type="number"
+                          min={1}
+                          value={entry.episodeNumber}
+                          onChange={(event) =>
+                            onUpdateItem(entry.key, {
+                              episodeNumber: Math.max(1, Number(event.target.value) || entry.episodeNumber),
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>Title</span>
+                        <input
+                          className="text-input"
+                          value={entry.episodeTitle}
+                          onChange={(event) =>
+                            onUpdateItem(entry.key, { episodeTitle: event.target.value })
+                          }
+                        />
+                      </label>
+                      <small>
+                        {entry.item.isPinned ? 'Pinned - ' : ''}
+                        {outOfOrder ? 'Check order - ' : ''}
+                        {entry.outputTitle}
+                      </small>
+                    </div>
+                  )
+                })}
                 {group.items.length > 8 && (
                   <div className="episode-more">
                     + {group.items.length - 8} more episode{group.items.length - 8 === 1 ? '' : 's'} in this series
@@ -2259,6 +2479,8 @@ function MetadataCard({
   onSaveCover,
   onToggle,
   onViewCover,
+  isPendingSubtitleRepair,
+  isMissingSubtitle,
 }: {
   coverPath?: string
   isSavingCover: boolean
@@ -2267,6 +2489,8 @@ function MetadataCard({
   onSaveCover: (item: MetadataPreview) => void
   onToggle: (item: MetadataPreview) => void
   onViewCover: (item: MetadataPreview) => void
+  isPendingSubtitleRepair?: boolean
+  isMissingSubtitle?: boolean
 }) {
   return (
     <article className={isSelected ? 'metadata-card selected' : 'metadata-card'}>
@@ -2324,6 +2548,18 @@ function MetadataCard({
           {coverPath && <span className="cover-saved">Saved</span>}
         </div>
         {item.warning && <small>{item.warning}</small>}
+        {isPendingSubtitleRepair && (
+          <div className="subtitle-repair-warning">
+            <ShieldAlert />
+            <span>Subtitle recovery pending after re-scan.</span>
+          </div>
+        )}
+        {isMissingSubtitle && (
+          <div className="subtitle-repair-warning">
+            <ShieldAlert />
+            <span>Missing subtitle sidecar. Selected for re-scan.</span>
+          </div>
+        )}
       </div>
     </article>
   )

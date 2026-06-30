@@ -42,6 +42,10 @@ type ScanSeriesMessage = {
   mode?: TikTokScanMode
 }
 
+type DrainPendingMessage = {
+  type: 'drain-pending'
+}
+
 type ScanTikTokProfileResponse = {
   ok: boolean
   error?: string
@@ -81,19 +85,19 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: 'sorevid-page',
-      title: 'Download page with Sorevid',
+      title: 'Download page with VideoGET',
       contexts: ['page'],
       documentUrlPatterns: supportedPatterns,
     })
     chrome.contextMenus.create({
       id: 'sorevid-link',
-      title: 'Download link with Sorevid',
+      title: 'Download link with VideoGET',
       contexts: ['link'],
       documentUrlPatterns: supportedPatterns,
     })
     chrome.contextMenus.create({
       id: 'sorevid-video',
-      title: 'Download video with Sorevid',
+      title: 'Download video with VideoGET',
       contexts: ['video'],
       documentUrlPatterns: supportedPatterns,
     })
@@ -136,7 +140,12 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 chrome.runtime.onMessage.addListener(
   (
-    message: SendUrlMessage | ScanProfileMessage | ScanShortDramaMessage | ScanSeriesMessage,
+    message:
+      | SendUrlMessage
+      | ScanProfileMessage
+      | ScanShortDramaMessage
+      | ScanSeriesMessage
+      | DrainPendingMessage,
     _sender,
     sendResponse: (response: NativeResponse) => void,
   ) => {
@@ -192,6 +201,29 @@ chrome.runtime.onMessage.addListener(
       return true
     }
 
+    if (message?.type === 'drain-pending') {
+      drainRescanItems()
+        .then((message) => {
+          sendResponse({
+            version: 1,
+            id: '',
+            ok: true,
+            code: 'ok',
+            message,
+          })
+        })
+        .catch((error) => {
+            sendResponse({
+              version: 1,
+              id: '',
+              ok: false,
+              code: 'app_unavailable',
+              message: error instanceof Error ? error.message : String(error),
+            })
+          })
+      return true
+    }
+
     return false
   },
 )
@@ -218,7 +250,7 @@ function sendUrl(url: string, title: string | undefined, trigger: Trigger) {
         return
       }
       if (!response) {
-        reject(new Error('Sorevid did not return a response.'))
+        reject(new Error('SOREVID VideoGET did not return a response.'))
         return
       }
       resolve(response)
@@ -253,19 +285,33 @@ async function drainRescanItems() {
   }
   const response = await sendNative(request)
   const items = response.rescanItems || []
-  if (items.length === 0) return
+  if (items.length === 0) return response.message || 'No TikTok re-scan items pending.'
 
   const tab = await findTikTokTab()
   if (!tab?.id) {
-    return
+    return `${items.length} TikTok item${items.length === 1 ? '' : 's'} pending, but no TikTok tab is open. Open a TikTok episode tab, then run pending repairs again.`
   }
+  const originalByUrl = new Map(
+    items.map((item) => [item.pageUrl || item.sourceUrl, item]),
+  )
   const resolved = await sendResolveUrlsMessage(
     tab.id,
     items.map((item) => item.pageUrl || item.sourceUrl),
   )
-  if (!resolved.length) return
+  if (!resolved.length) {
+    return `${items.length} TikTok item${items.length === 1 ? '' : 's'} pending, but Chrome could not resolve fresh media URLs from this tab.`
+  }
   const cookieHeader = await tiktokCookieHeader(tab.url || 'https://www.tiktok.com/')
-  const merged = resolved.map((item) => ({ ...item, cookieHeader }))
+  const merged = resolved.map((item) => {
+    const original = originalByUrl.get(item.pageUrl || item.sourceUrl)
+    return {
+      ...item,
+      cookieHeader,
+      outputFolder: original?.outputFolder || item.outputFolder,
+      outputFilename: original?.outputFilename || item.outputFilename,
+      isPinned: original?.isPinned ?? item.isPinned,
+    }
+  })
   await sendNative({
     version: 1,
     id: requestId(),
@@ -278,6 +324,7 @@ async function drainRescanItems() {
       trigger: 'profile-scan',
     },
   })
+  return `Resolved ${merged.length} TikTok item${merged.length === 1 ? '' : 's'} for subtitle repair and sent them to SOREVID VideoGET.`
 }
 
 async function findTikTokTab() {
@@ -314,7 +361,7 @@ function sendNative(request: NativeRequest) {
         return
       }
       if (!response) {
-        reject(new Error('Sorevid did not return a response.'))
+        reject(new Error('SOREVID VideoGET did not return a response.'))
         return
       }
       resolve(response)
@@ -325,7 +372,7 @@ function sendNative(request: NativeRequest) {
 function browserFallbackFilename(item: ResolvedMediaItem) {
   const folder = sanitizePathPart((item as ResolvedMediaItem & { outputFolder?: string }).outputFolder || item.uploader || 'TikTok')
   const base = sanitizePathPart((item as ResolvedMediaItem & { outputFilename?: string }).outputFilename || item.title || 'TikTok video')
-  return `Sorevid/${folder}/${base}.mp4`
+  return `VideoGET/${folder}/${base}.mp4`
 }
 
 function sanitizePathPart(value: string) {
@@ -378,7 +425,7 @@ export async function scanTikTokProfile(
         return
       }
       if (!nativeResponse) {
-        reject(new Error('Sorevid did not return a response.'))
+        reject(new Error('SOREVID VideoGET did not return a response.'))
         return
       }
       resolve(nativeResponse)
@@ -428,7 +475,7 @@ export async function scanTikTokShortDrama(
         return
       }
       if (!nativeResponse) {
-        reject(new Error('Sorevid did not return a response.'))
+        reject(new Error('SOREVID VideoGET did not return a response.'))
         return
       }
       resolve(nativeResponse)
@@ -478,7 +525,7 @@ export async function scanTikTokSeries(
         return
       }
       if (!nativeResponse) {
-        reject(new Error('Sorevid did not return a response.'))
+        reject(new Error('SOREVID VideoGET did not return a response.'))
         return
       }
       resolve(nativeResponse)
@@ -592,12 +639,12 @@ function wait(ms: number) {
 function nativeErrorMessage(message: string) {
   const lower = message.toLowerCase()
   if (lower.includes('not found') || lower.includes('specified native messaging host')) {
-    return 'Chrome Integration is not installed. Open Sorevid and click Install.'
+    return 'Chrome Integration is not installed. Open SOREVID VideoGET and click Install.'
   }
   if (lower.includes('forbidden')) {
-    return 'This extension is not authorized by the Sorevid native host.'
+    return 'This extension is not authorized by the SOREVID VideoGET native host.'
   }
-  return `Could not connect to Sorevid: ${message}`
+  return `Could not connect to SOREVID VideoGET: ${message}`
 }
 
 function showBadge(tabId: number | undefined, success: boolean) {

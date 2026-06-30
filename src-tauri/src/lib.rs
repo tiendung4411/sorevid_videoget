@@ -167,6 +167,56 @@ struct DirectDownloadRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct DirectSubtitleRepairRequest {
+    items: Vec<ResolvedMediaItem>,
+    download_dir: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DirectSubtitleCheckRequest {
+    items: Vec<ResolvedMediaItem>,
+    download_dir: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DirectSubtitleAudit {
+    expected_paths: Vec<PathBuf>,
+    present_paths: Vec<PathBuf>,
+    missing_paths: Vec<PathBuf>,
+    has_missing_required: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DirectSubtitleCheckItem {
+    source_url: String,
+    page_url: String,
+    title: Option<String>,
+    episode_number: Option<u64>,
+    media_path: Option<String>,
+    expected_paths: Vec<String>,
+    present_paths: Vec<String>,
+    missing_paths: Vec<String>,
+    media_found: bool,
+    has_subtitles: bool,
+    has_missing_required: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DirectSubtitleCheckResult {
+    total: usize,
+    checked: usize,
+    missing: usize,
+    media_not_found: usize,
+    no_subtitles: usize,
+    items: Vec<DirectSubtitleCheckItem>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RescanRequest {
     items: Vec<ResolvedMediaItem>,
 }
@@ -1059,6 +1109,143 @@ fn queue_tiktok_rescan(
 }
 
 #[tauri::command]
+async fn retry_missing_direct_subtitles(
+    app: AppHandle,
+    request: DirectSubtitleRepairRequest,
+) -> Result<String, String> {
+    if request.items.is_empty() {
+        return Err("Select at least one direct item to repair subtitles.".to_string());
+    }
+    let download_dir = PathBuf::from(&request.download_dir);
+    if !download_dir.is_dir() {
+        return Err("The selected download folder does not exist.".to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|error| format!("Failed to prepare subtitle repair client: {error}"))?;
+
+    let mut recovered = 0usize;
+    let mut still_missing = 0usize;
+    let mut not_found = 0usize;
+
+    for item in &request.items {
+        let Some(media_path) = existing_direct_media_output(&download_dir, item) else {
+            not_found += 1;
+            continue;
+        };
+        let repair = repair_direct_subtitles_for_existing_media(
+            &client,
+            item,
+            &media_path,
+            &app,
+            "repair",
+        )
+        .await;
+        if repair.has_missing_required {
+            still_missing += 1;
+            write_direct_metadata_sidecar(
+                item,
+                &media_path,
+                &repair.present_paths,
+                "failed",
+            )
+            .ok();
+            emit_subtitle_audit_event(&app, "repair", &media_path, &repair);
+        } else {
+            recovered += 1;
+            write_direct_metadata_sidecar(
+                item,
+                &media_path,
+                &repair.present_paths,
+                "recovered",
+            )
+            .ok();
+        }
+    }
+
+    Ok(format!(
+        "Subtitle repair finished: {recovered} recovered, {still_missing} still missing, {not_found} media file not found."
+    ))
+}
+
+#[tauri::command]
+fn check_direct_subtitles(
+    request: DirectSubtitleCheckRequest,
+) -> Result<DirectSubtitleCheckResult, String> {
+    if request.items.is_empty() {
+        return Err("Select at least one direct item to check subtitles.".to_string());
+    }
+    let download_dir = PathBuf::from(&request.download_dir);
+    if !download_dir.is_dir() {
+        return Err("The selected download folder does not exist.".to_string());
+    }
+
+    let mut items = Vec::new();
+    let mut checked = 0usize;
+    let mut missing = 0usize;
+    let mut media_not_found = 0usize;
+    let mut no_subtitles = 0usize;
+
+    for item in &request.items {
+        let media_path = existing_direct_media_output(&download_dir, item);
+        let expects_subtitles = !item.subtitles.is_empty() || is_direct_series_item(item);
+        let has_subtitles = !item.subtitles.is_empty();
+        if !has_subtitles {
+            no_subtitles += 1;
+        }
+
+        let (expected_paths, present_paths, missing_paths, has_missing_required) =
+            match media_path.as_deref() {
+                Some(path) => {
+                    checked += 1;
+                    let audit = audit_direct_subtitles(item, path);
+                    if audit.has_missing_required {
+                        missing += 1;
+                    }
+                    (
+                        paths_to_strings(&audit.expected_paths),
+                        paths_to_strings(&audit.present_paths),
+                        paths_to_strings(&audit.missing_paths),
+                        audit.has_missing_required,
+                    )
+                }
+                None => {
+                    media_not_found += 1;
+                    (Vec::new(), Vec::new(), Vec::new(), false)
+                }
+            };
+
+        items.push(DirectSubtitleCheckItem {
+            source_url: item.source_url.clone(),
+            page_url: item.page_url.clone(),
+            title: item.title.clone(),
+            episode_number: item.episode_number,
+            media_path: media_path
+                .as_ref()
+                .map(|path| path.display().to_string()),
+            expected_paths,
+            present_paths,
+            missing_paths,
+            media_found: media_path.is_some(),
+            has_subtitles,
+            has_missing_required: has_missing_required && expects_subtitles,
+        });
+    }
+
+    Ok(DirectSubtitleCheckResult {
+        total: request.items.len(),
+        checked,
+        missing,
+        media_not_found,
+        no_subtitles,
+        items,
+    })
+}
+
+#[tauri::command]
 async fn organize_batch_with_ai(request: AiBatchRequest) -> Result<AiBatchResult, String> {
     let api_key = request.api_key.trim();
     if api_key.is_empty() {
@@ -1153,10 +1340,10 @@ fn install_chrome_integration(app: AppHandle) -> Result<ChromeIntegrationStatus,
         fs::create_dir_all(parent)
             .map_err(|error| format!("Failed to create Chrome integration folder: {error}"))?;
         let executable = std::env::current_exe()
-            .map_err(|error| format!("Could not locate Sorevid executable: {error}"))?;
+            .map_err(|error| format!("Could not locate SOREVID VideoGET executable: {error}"))?;
         let manifest = serde_json::json!({
             "name": NATIVE_HOST_NAME,
-            "description": "Sorevid Downloader Chrome integration",
+            "description": "SOREVID VideoGET Chrome integration",
             "path": executable,
             "type": "stdio",
             "allowed_origins": [EXTENSION_ORIGIN]
@@ -1182,10 +1369,10 @@ fn install_chrome_integration(app: AppHandle) -> Result<ChromeIntegrationStatus,
     #[cfg(target_os = "macos")]
     {
         let executable = std::env::current_exe()
-            .map_err(|error| format!("Could not locate Sorevid executable: {error}"))?;
+            .map_err(|error| format!("Could not locate SOREVID VideoGET executable: {error}"))?;
         let manifest = serde_json::json!({
             "name": NATIVE_HOST_NAME,
-            "description": "Sorevid Downloader Chrome integration",
+            "description": "SOREVID VideoGET Chrome integration",
             "path": executable,
             "type": "stdio",
             "allowed_origins": [EXTENSION_ORIGIN]
@@ -1573,7 +1760,7 @@ async fn download_cover(request: CoverRequest) -> Result<CoverResult, String> {
         .get(&request.thumbnail_url)
         .header(
             reqwest::header::USER_AGENT,
-            "Mozilla/5.0 SOREVID Downloader",
+            "Mozilla/5.0 SOREVID VideoGET",
         )
         .send()
         .await
@@ -2077,6 +2264,62 @@ async fn start_direct_download(
             }
 
             if let Some(existing_path) = existing_direct_media_output(&download_dir, item) {
+                let audit = audit_direct_subtitles(item, &existing_path);
+                if audit.has_missing_required {
+                    let repair = repair_direct_subtitles_for_existing_media(
+                        &client,
+                        item,
+                        &existing_path,
+                        &app_handle,
+                        &wait_job_id,
+                    )
+                    .await;
+                    if repair.has_missing_required {
+                        if let Ok(mut pending) = extension_state_handle.pending_rescan_items.lock() {
+                            pending.push(item.clone());
+                        }
+                        write_direct_metadata_sidecar(
+                            item,
+                            &existing_path,
+                            &repair.present_paths,
+                            "queued_rescan",
+                        )
+                        .ok();
+                        emit_subtitle_audit_event(
+                            &app_handle,
+                            &wait_job_id,
+                            &existing_path,
+                            &repair,
+                        );
+                    } else {
+                        write_direct_metadata_sidecar(
+                            item,
+                            &existing_path,
+                            &repair.present_paths,
+                            "recovered",
+                        )
+                        .ok();
+                        emit_event(
+                            &app_handle,
+                            DownloadEvent {
+                                job_id: wait_job_id.clone(),
+                                status: "running".to_string(),
+                                percent: Some(((index + 1) as f32 / total_items as f32) * 100.0),
+                                speed: None,
+                                eta: None,
+                                current_item: None,
+                                total_items: None,
+                                line: Some(format!(
+                                    "[direct] Recovered missing subtitles for existing file: {}",
+                                    existing_path.display()
+                                )),
+                                output_path: Some(existing_path.display().to_string()),
+                                media_report: None,
+                            },
+                        );
+                    }
+                    continue;
+                }
                 skipped_paths.push(existing_path.clone());
                 emit_event(
                     &app_handle,
@@ -2131,8 +2374,26 @@ async fn start_direct_download(
             )
             .await
             {
-                Ok(path) => {
+                Ok((path, audit)) => {
                     completed_paths.push(path.clone());
+                    if audit.has_missing_required {
+                        if let Ok(mut pending) = extension_state_handle.pending_rescan_items.lock() {
+                            pending.push(item.clone());
+                        }
+                        write_direct_metadata_sidecar(
+                            item,
+                            &path,
+                            &audit.present_paths,
+                            "queued_rescan",
+                        )
+                        .ok();
+                        emit_subtitle_audit_event(
+                            &app_handle,
+                            &wait_job_id,
+                            &path,
+                            &audit,
+                        );
+                    }
                     let report = match ffprobe.as_ref() {
                         Some(ffprobe_path) => probe_media_with(ffprobe_path, &path).await.ok(),
                         None => None,
@@ -2312,7 +2573,7 @@ async fn download_direct_media_item(
     item: &ResolvedMediaItem,
     job_id: &str,
     app: &AppHandle,
-) -> Result<PathBuf, String> {
+) -> Result<(PathBuf, DirectSubtitleAudit), String> {
     let output_dir = direct_output_dir(download_dir, item);
     fs::create_dir_all(&output_dir)
         .map_err(|error| format!("Failed to create output folder: {error}"))?;
@@ -2457,9 +2718,15 @@ async fn download_direct_media_item(
     fs::rename(&partial_path, &filename)
         .map_err(|error| format!("Failed to finalize direct media file: {error}"))?;
     let subtitle_paths = download_direct_subtitles(client, item, &filename, app, job_id).await;
-    write_direct_metadata_sidecar(item, &filename, &subtitle_paths)?;
+    let audit = audit_direct_subtitles(item, &filename);
+    let recovery_status = if audit.has_missing_required {
+        "missing"
+    } else {
+        "ok"
+    };
+    write_direct_metadata_sidecar(item, &filename, &subtitle_paths, recovery_status)?;
 
-    Ok(filename)
+    Ok((filename, audit))
 }
 
 async fn download_direct_subtitles(
@@ -2563,40 +2830,6 @@ async fn download_direct_subtitle(
         .map_err(|error| format!("Failed to write subtitle sidecar: {error}"))?;
 
     Ok(Some(subtitle_path))
-}
-
-fn write_direct_metadata_sidecar(
-    item: &ResolvedMediaItem,
-    media_path: &Path,
-    subtitle_paths: &[PathBuf],
-) -> Result<(), String> {
-    let sidecar_path = metadata_sidecar_path(media_path);
-    let payload = serde_json::json!({
-        "sourceUrl": item.source_url.clone(),
-        "pageUrl": item.page_url.clone(),
-        "mediaUrl": item.media_url.clone(),
-        "dramaId": item.drama_id.clone(),
-        "seriesName": item.series_name.clone(),
-        "episodeNumber": item.episode_number,
-        "title": item.title.clone(),
-        "uploader": item.uploader.clone(),
-        "duration": item.duration,
-        "thumbnail": item.thumbnail.clone(),
-        "videoCodec": item.video_codec.clone(),
-        "audioCodec": item.audio_codec.clone(),
-        "width": item.width,
-        "height": item.height,
-        "subtitles": item.subtitles.clone(),
-        "outputPath": media_path.display().to_string(),
-        "subtitlePaths": subtitle_paths
-            .iter()
-            .map(|path| path.display().to_string())
-            .collect::<Vec<_>>(),
-    });
-    let text = serde_json::to_string_pretty(&payload)
-        .map_err(|error| format!("Failed to serialize metadata sidecar: {error}"))?;
-    fs::write(&sidecar_path, text)
-        .map_err(|error| format!("Failed to write metadata sidecar: {error}"))
 }
 
 async fn kill_process(pid: u32) -> Result<(), String> {
@@ -4172,6 +4405,164 @@ fn format_bytes(value: u64) -> String {
     }
 }
 
+fn audit_direct_subtitles(item: &ResolvedMediaItem, media_path: &Path) -> DirectSubtitleAudit {
+    let fallback_subtitle;
+    let subtitles = if item.subtitles.is_empty() && is_direct_series_item(item) {
+        fallback_subtitle = vec![ResolvedSubtitle {
+            format: Some("vtt".to_string()),
+            language: Some("und".to_string()),
+            url: String::new(),
+        }];
+        fallback_subtitle.as_slice()
+    } else {
+        item.subtitles.as_slice()
+    };
+    let expected_paths: Vec<PathBuf> = subtitles
+        .iter()
+        .map(|subtitle| subtitle_output_path(media_path, subtitle))
+        .collect();
+    let mut present_paths = Vec::new();
+    let mut missing_paths = Vec::new();
+
+    for path in &expected_paths {
+        let present = path
+            .metadata()
+            .ok()
+            .map(|metadata| metadata.is_file() && metadata.len() > 0)
+            .unwrap_or(false);
+        if present {
+            present_paths.push(path.clone());
+        } else {
+            missing_paths.push(path.clone());
+        }
+    }
+
+    let has_missing_required = !missing_paths.is_empty() && !subtitles.is_empty();
+
+    DirectSubtitleAudit {
+        expected_paths,
+        present_paths,
+        missing_paths,
+        has_missing_required,
+    }
+}
+
+fn is_direct_series_item(item: &ResolvedMediaItem) -> bool {
+    item.drama_id.is_some() || item.series_name.is_some() || item.episode_number.is_some()
+}
+
+fn paths_to_strings(paths: &[PathBuf]) -> Vec<String> {
+    paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect()
+}
+
+async fn repair_direct_subtitles_for_existing_media(
+    client: &reqwest::Client,
+    item: &ResolvedMediaItem,
+    media_path: &Path,
+    app: &AppHandle,
+    job_id: &str,
+) -> DirectSubtitleAudit {
+    let _ = download_direct_subtitles(client, item, media_path, app, job_id).await;
+    audit_direct_subtitles(item, media_path)
+}
+
+fn emit_subtitle_audit_event(
+    app: &AppHandle,
+    job_id: &str,
+    media_path: &Path,
+    audit: &DirectSubtitleAudit,
+) {
+    if audit.has_missing_required {
+        let names: Vec<String> = audit
+            .missing_paths
+            .iter()
+            .filter_map(|path| path.file_name().and_then(|value| value.to_str()).map(String::from))
+            .collect();
+        emit_event(
+            app,
+            DownloadEvent {
+                job_id: job_id.to_string(),
+                status: "warning".to_string(),
+                percent: None,
+                speed: None,
+                eta: None,
+                current_item: None,
+                total_items: None,
+                line: Some(format!(
+                    "[direct] Missing subtitle sidecar{} {}. Queued Chrome re-scan to refresh subtitle URL.",
+                    if names.len() == 1 { "" } else { "s" },
+                    names.join(", ")
+                )),
+                output_path: Some(media_path.display().to_string()),
+                media_report: None,
+            },
+        );
+    }
+}
+
+fn write_direct_metadata_sidecar(
+    item: &ResolvedMediaItem,
+    media_path: &Path,
+    subtitle_paths: &[PathBuf],
+    recovery_status: &str,
+) -> Result<(), String> {
+    let sidecar_path = metadata_sidecar_path(media_path);
+    let audit = audit_direct_subtitles(item, media_path);
+    let expected = audit
+        .expected_paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>();
+    let missing = audit
+        .missing_paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>();
+    let payload = serde_json::json!({
+        "sourceUrl": item.source_url.clone(),
+        "pageUrl": item.page_url.clone(),
+        "mediaUrl": item.media_url.clone(),
+        "dramaId": item.drama_id.clone(),
+        "seriesName": item.series_name.clone(),
+        "episodeNumber": item.episode_number,
+        "title": item.title.clone(),
+        "uploader": item.uploader.clone(),
+        "duration": item.duration,
+        "thumbnail": item.thumbnail.clone(),
+        "videoCodec": item.video_codec.clone(),
+        "audioCodec": item.audio_codec.clone(),
+        "width": item.width,
+        "height": item.height,
+        "subtitles": item.subtitles.clone(),
+        "outputPath": media_path.display().to_string(),
+        "subtitlePaths": subtitle_paths
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>(),
+        "expectedSubtitlePaths": expected,
+        "missingSubtitlePaths": missing,
+        "subtitleRecovery": {
+            "status": recovery_status,
+            "lastCheckedAt": current_timestamp_seconds(),
+            "missingCount": missing.len(),
+        }
+    });
+    let text = serde_json::to_string_pretty(&payload)
+        .map_err(|error| format!("Failed to serialize metadata sidecar: {error}"))?;
+    fs::write(&sidecar_path, text)
+        .map_err(|error| format!("Failed to write metadata sidecar: {error}"))
+}
+
+fn current_timestamp_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -4201,6 +4592,8 @@ pub fn run() {
             delete_cookie_file,
             start_download,
             start_direct_download,
+            retry_missing_direct_subtitles,
+            check_direct_subtitles,
             cancel_download,
             probe_media,
             convert_to_h264,

@@ -1,6 +1,6 @@
 # Audit: yt-dlp Cookie Management for Bilibili and Douyin
 
-This document summarizes how Sorevid Downloader uses `yt-dlp` to manage cookies and download videos from Bilibili and Douyin. It is written as an integration handoff for another app that already has `yt-dlp`.
+This document summarizes how SOREVID VideoGET uses `yt-dlp` to manage cookies and download videos from Bilibili and Douyin. It is written as an integration handoff for another app that already has `yt-dlp`.
 
 ## Scope
 
@@ -547,4 +547,3 @@ yt-dlp \
   --no-warnings \
   "https://www.douyin.com/"
 ```
-

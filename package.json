@@ -1,11 +1,11 @@
 {
-  "name": "sorevid-downloader",
+  "name": "sorevid-videoget",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "debug:app:mac": "env -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH npm run tauri -- build --debug --bundles app && open -n \"src-tauri/target/debug/bundle/macos/SOREVID Downloader.app\"",
+    "debug:app:mac": "env -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH npm run tauri -- build --debug --bundles app && open -n \"src-tauri/target/debug/bundle/macos/SOREVID VideoGET.app\"",
     "tauri:dev": "tauri dev",
     "web:dev": "vite",
     "build": "tsc -b && vite build",

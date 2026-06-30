@@ -4,7 +4,7 @@ setlocal
 cd /d "%~dp0"
 
 echo ========================================
-echo Sorevid Downloader - Dev Updater
+echo SOREVID VideoGET - Dev Updater
 echo ========================================
 echo.
 

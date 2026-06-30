@@ -195,7 +195,7 @@ function attachButton(container: HTMLElement) {
   const button = document.createElement('button')
   button.type = 'button'
   button.className = 'sorevid-player-button'
-  button.textContent = '↓ Sorevid'
+  button.textContent = '↓ VideoGET'
   button.addEventListener('click', (event) => {
     event.preventDefault()
     event.stopPropagation()
@@ -219,12 +219,12 @@ function sendCurrentPage(button: HTMLButtonElement) {
     (response: NativeResponse | undefined) => {
       const error = chrome.runtime.lastError
       button.disabled = false
-      button.textContent = '↓ Sorevid'
+      button.textContent = '↓ VideoGET'
       if (error) {
-        showToast(error.message || 'Could not connect to Sorevid.', true)
+        showToast(error.message || 'Could not connect to SOREVID VideoGET.', true)
         return
       }
-      showToast(response?.message || 'Sorevid did not return a response.', !response?.ok)
+      showToast(response?.message || 'SOREVID VideoGET did not return a response.', !response?.ok)
     },
   )
 }
@@ -453,40 +453,53 @@ async function scanTikTokSeriesFromVideo(
   const collected = new Map<string, ResolvedMediaItem>()
   let dramaId = ''
 
-  if (signed) {
-    const targetDramaId = firstItemDramaId(signed.payload)
-    const base = new URL(signed.url)
-    dramaId = targetDramaId || base.searchParams.get('dramaID') || ''
-    ingestEpisodePayload(signed.payload, dramaId, collected)
+  const performanceEpisodeApi = findEpisodeApiFromPerformance()
+  const episodeApiUrls = Array.from(
+    new Set([signed?.url, performanceEpisodeApi].filter(Boolean) as string[]),
+  )
 
-    for (let cursor = 0; ; cursor += 24) {
-      const url = new URL(base.toString())
-      url.searchParams.set('count', '24')
-      url.searchParams.set('cursor', String(cursor))
-      if (dramaId) {
-        url.searchParams.set('dramaID', dramaId)
+  if (episodeApiUrls.length > 0) {
+    const targetDramaId = signed ? firstItemDramaId(signed.payload) : ''
+    if (signed) {
+      ingestEpisodePayload(signed.payload, targetDramaId, collected)
+    }
+
+    for (const episodeApiUrl of episodeApiUrls) {
+      const base = new URL(episodeApiUrl)
+      const apiDramaId = targetDramaId || base.searchParams.get('dramaID') || dramaId
+      if (apiDramaId) {
+        dramaId = apiDramaId
       }
 
-      let payload: any
-      try {
-        payload = await fetch(url.toString(), { credentials: 'include' }).then((response) => response.json())
-      } catch {
-        break
-      }
+      for (let cursor = 0; ; cursor += 24) {
+        const url = new URL(base.toString())
+        url.searchParams.set('count', '24')
+        url.searchParams.set('cursor', String(cursor))
+        if (dramaId) {
+          url.searchParams.set('dramaID', dramaId)
+        }
 
-      const before = collected.size
-      ingestEpisodePayload(payload, dramaId, collected)
-      console.debug('[sorevid] series page', {
-        cursor,
-        added: collected.size - before,
-        total: collected.size,
-        hasMore: payload?.hasMore,
-      })
+        let payload: any
+        try {
+          payload = await fetch(url.toString(), { credentials: 'include' }).then((response) => response.json())
+        } catch {
+          break
+        }
 
-      if (payload?.hasMore !== true) {
-        break
+        const before = collected.size
+        ingestEpisodePayload(payload, dramaId, collected)
+        console.debug('[sorevid] series page', {
+          cursor,
+          added: collected.size - before,
+          total: collected.size,
+          hasMore: payload?.hasMore,
+        })
+
+        if (payload?.hasMore !== true) {
+          break
+        }
+        await wait(randomBetween(...timing.resolveDelay))
       }
-      await wait(randomBetween(...timing.resolveDelay))
     }
   } else {
     const html = document.documentElement.outerHTML
@@ -506,6 +519,14 @@ async function scanTikTokSeriesFromVideo(
   }
 
   return results
+}
+
+function findEpisodeApiFromPerformance() {
+  const entries = performance
+    .getEntriesByType('resource')
+    .map((entry) => entry.name)
+    .filter((url) => url.includes('/api/drama/episode/item_list/'))
+  return entries.at(-1) || ''
 }
 
 type ProfileVideoLink = {

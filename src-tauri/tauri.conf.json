@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "SOREVID Downloader",
+  "productName": "SOREVID VideoGET",
   "version": "0.1.0",
   "identifier": "com.bilibili-downloader.desktop",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "SOREVID Downloader",
+        "title": "SOREVID VideoGET",
         "width": 1180,
         "height": 780,
         "minWidth": 900,
@@ -27,6 +27,7 @@
     "active": true,
     "targets": "all",
     "icon": [
+      "icons/icon.icns",
       "icons/icon.ico",
       "icons/32x32.png",
       "icons/128x128.png",

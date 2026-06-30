@@ -8,6 +8,7 @@ const sendButton = document.querySelector<HTMLButtonElement>('#send')!
 const scanButton = document.querySelector<HTMLButtonElement>('#scan')!
 const scanDramaButton = document.querySelector<HTMLButtonElement>('#scan-drama')!
 const downloadSeriesButton = document.querySelector<HTMLButtonElement>('#download-series')!
+const runPendingButton = document.querySelector<HTMLButtonElement>('#run-pending')!
 const scanOptionsElement = document.querySelector<HTMLElement>('#scan-options')!
 const scanLimitElement = document.querySelector<HTMLSelectElement>('#scan-limit')!
 const scanModeElement = document.querySelector<HTMLSelectElement>('#scan-mode')!
@@ -47,7 +48,7 @@ sendButton.addEventListener('click', () => {
   const url = activeTab?.url
   if (!url) return
   sendButton.disabled = true
-  sendButton.textContent = 'Opening Sorevid…'
+  sendButton.textContent = 'Opening VideoGET…'
   setStatus('Connecting to the desktop app…', 'idle')
 
   chrome.runtime.sendMessage(
@@ -60,13 +61,13 @@ sendButton.addEventListener('click', () => {
     (response: NativeResponse | undefined) => {
       const error = chrome.runtime.lastError
       sendButton.disabled = false
-      sendButton.textContent = 'Open in Sorevid'
+      sendButton.textContent = 'Open in VideoGET'
       if (error) {
         setStatus(error.message || 'Could not contact the extension service worker.', 'error')
         return
       }
       if (!response) {
-        setStatus('Sorevid did not return a response.', 'error')
+        setStatus('SOREVID VideoGET did not return a response.', 'error')
         return
       }
       setStatus(response.message, response.ok ? 'success' : 'error')
@@ -103,7 +104,7 @@ scanButton.addEventListener('click', () => {
         return
       }
       if (!response) {
-        setStatus('Sorevid did not return a response.', 'error')
+        setStatus('SOREVID VideoGET did not return a response.', 'error')
         return
       }
       setStatus(response.message, response.ok ? 'success' : 'error')
@@ -142,7 +143,7 @@ scanDramaButton.addEventListener('click', () => {
         return
       }
       if (!response) {
-        setStatus('Sorevid did not return a response.', 'error')
+        setStatus('SOREVID VideoGET did not return a response.', 'error')
         return
       }
       setStatus(response.message, response.ok ? 'success' : 'error')
@@ -181,13 +182,42 @@ downloadSeriesButton.addEventListener('click', () => {
         return
       }
       if (!response) {
-        setStatus('Sorevid did not return a response.', 'error')
+        setStatus('SOREVID VideoGET did not return a response.', 'error')
         return
       }
       setStatus(response.message, response.ok ? 'success' : 'error')
     },
   )
 })
+
+runPendingButton.addEventListener('click', () => {
+  runPendingRepairs()
+})
+
+function runPendingRepairs() {
+  runPendingButton.disabled = true
+  runPendingButton.textContent = 'Checking repairs...'
+  setStatus('Checking pending subtitle repairs with the desktop app...', 'idle')
+
+  chrome.runtime.sendMessage({ type: 'drain-pending' }, (response: NativeResponse | undefined) => {
+    const error = chrome.runtime.lastError
+    runPendingButton.disabled = false
+    runPendingButton.textContent = 'Run pending repairs'
+    if (error) {
+      setStatus(error.message || 'Could not contact the extension service worker.', 'error')
+      return
+    }
+    if (!response) {
+      setStatus('SOREVID VideoGET did not return a response for pending repairs.', 'error')
+      return
+    }
+    if (!response.ok) {
+      setStatus(response.message, 'error')
+      return
+    }
+    setStatus(response.message, 'success')
+  })
+}
 
 function setStatus(message: string, state: 'idle' | 'success' | 'error') {
   statusElement.textContent = message

@@ -81,10 +81,10 @@ npm run build:all
 
 Then:
 
-1. Run Sorevid Downloader and click **Register bridge** under **Chrome Integration Bridge**. This registers the native desktop host only; it does not install a Chrome extension.
+1. Run SOREVID VideoGET and click **Register bridge** under **Chrome Integration Bridge**. This registers the native desktop host only; it does not install a Chrome extension.
 2. Open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**.
 3. Select the generated `dist-extension` folder.
-4. Pin **Sorevid Downloader Integration** and use **Open in Sorevid** on a web page.
+4. Pin **SOREVID VideoGET Integration** and use **Open in VideoGET** on a web page.
 
 The extension has the fixed ID `iplhkneijdhbagijdoldmdmmjbfdkifc`. It sends page URLs only; cookies remain managed by the desktop app.
 
@@ -93,10 +93,10 @@ The extension has the fixed ID `iplhkneijdhbagijdoldmdmmjbfdkifc`. It sends page
 Each supported platform has an independent cookie profile:
 
 - **Chrome** reads the active browser session directly through `yt-dlp`.
-- **Import** validates and copies a Netscape-format `cookies.txt` file into Sorevid's local managed storage.
+- **Import** validates and copies a Netscape-format `cookies.txt` file into SOREVID VideoGET's local managed storage.
 - **Export from Chrome** creates a local managed `cookies.txt` using `yt-dlp --cookies-from-browser chrome`.
 - **Validate** reports cookie count, file size, and modification time.
-- **Delete** only removes files inside Sorevid's managed cookie folder.
+- **Delete** only removes files inside SOREVID VideoGET's managed cookie folder.
 
 Cookie files contain login credentials. They are kept locally and should never be uploaded or shared.
 # sorevid_downloader

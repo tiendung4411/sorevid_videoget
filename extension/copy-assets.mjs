@@ -11,7 +11,7 @@ for (const file of ['manifest.json', 'popup.html', 'popup.css', 'content.css']) 
 }
 await mkdir(resolve(output, 'icons'), { recursive: true })
 try {
-  await cp(resolve(here, '..', 'app-icon.png'), resolve(output, 'icons', 'icon.png'))
+  await cp(resolve(here, '..', 'src', 'assets', 'icons', 'videoget.png'), resolve(output, 'icons', 'icon.png'))
 } catch (error) {
   if (error?.code !== 'EPERM') throw error
   console.warn('Skipped icon refresh because Chrome is currently using it.')
