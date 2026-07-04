@@ -32,6 +32,19 @@ async function main() {
     await chmod(ytDlp, 0o755)
   }
 
+  const deno = join(binDir, 'deno')
+  if (!existsSync(deno)) {
+    const denoTarget = process.arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin'
+    const denoZip = join(tmpDir, 'deno.zip')
+    const denoDir = join(tmpDir, 'deno')
+    await download(`https://github.com/denoland/deno/releases/latest/download/deno-${denoTarget}.zip`, denoZip)
+    await rm(denoDir, { recursive: true, force: true })
+    await mkdir(denoDir, { recursive: true })
+    await execFileAsync('unzip', ['-o', denoZip, '-d', denoDir])
+    await execFileAsync('cp', [join(denoDir, 'deno'), deno])
+    await chmod(deno, 0o755)
+  }
+
   const ffmpegZip = join(tmpDir, 'ffmpeg.zip')
   const ffmpegDir = join(tmpDir, 'ffmpeg')
   if (!existsSync(join(binDir, 'ffmpeg'))) {

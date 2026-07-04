@@ -1042,6 +1042,24 @@ function App() {
           return next
         }
 
+        const queuedRegularIndex = updatedJobs.findIndex(
+          (job) =>
+            job.id.startsWith('queued-') &&
+            !job.id.endsWith('-direct') &&
+            job.status === 'queued',
+        )
+        if (queuedRegularIndex >= 0) {
+          const next = [...updatedJobs]
+          const queued = next[queuedRegularIndex]
+          next[queuedRegularIndex] = {
+            ...eventJob,
+            urls: queued.urls,
+            titles: queued.titles,
+            logs: [...queued.logs, ...eventJob.logs],
+          }
+          return next
+        }
+
         return [eventJob, ...updatedJobs]
       })
     })

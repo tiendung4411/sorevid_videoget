@@ -64,6 +64,23 @@ async function main() {
     await download('https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe', ytDlp)
   }
 
+  const deno = join(binDir, 'deno.exe')
+  if (!existsSync(deno)) {
+    const denoZip = join(tmpDir, 'deno.zip')
+    const denoDir = join(tmpDir, 'deno')
+    await download('https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip', denoZip)
+    await rm(denoDir, { recursive: true, force: true })
+    await mkdir(denoDir, { recursive: true })
+    await expandArchive(denoZip, denoDir)
+
+    const extractedDeno = await findFile(denoDir, 'deno.exe')
+    if (!extractedDeno) {
+      throw new Error('Could not find deno.exe in the downloaded archive.')
+    }
+
+    await copyFile(extractedDeno, deno)
+  }
+
   const ffmpeg = join(binDir, 'ffmpeg.exe')
   const ffprobe = join(binDir, 'ffprobe.exe')
   if (!existsSync(ffmpeg) || !existsSync(ffprobe)) {

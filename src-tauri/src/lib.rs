@@ -475,6 +475,16 @@ impl BinaryResolver {
         self.resolve("ffprobe")
     }
 
+    fn youtube_js_runtime(&self) -> Option<String> {
+        for name in ["deno", "node"] {
+            if let Ok(path) = self.resolve(name) {
+                return Some(format!("{name}:{}", path.display()));
+            }
+        }
+
+        None
+    }
+
     fn resolve(&self, name: &str) -> Result<PathBuf, String> {
         let platform_name = if cfg!(windows) {
             format!("{name}.exe")
@@ -1700,6 +1710,11 @@ async fn fetch_metadata(
         if is_bilibili_channel_url(url) || is_tiktok_channel_url(url) {
             args.extend(["--playlist-end".to_string(), "24".to_string()]);
         }
+        if is_youtube_url(url) {
+            if let Some(runtime) = resolver.youtube_js_runtime() {
+                args.extend(["--js-runtimes".to_string(), runtime]);
+            }
+        }
         args.extend(build_cookie_args(
             &request.cookie_mode,
             request.manual_cookie_path.as_deref(),
@@ -1991,7 +2006,16 @@ async fn start_download(
     if request.embed_subtitles && ffmpeg_location.is_none() {
         return Err("ffmpeg is required to embed subtitles into MP4.".to_string());
     }
-    let args = build_yt_dlp_args(&request, ffmpeg_location.as_deref());
+    let youtube_js_runtime = if request.urls.iter().any(|url| is_youtube_url(url)) {
+        resolver.youtube_js_runtime()
+    } else {
+        None
+    };
+    let args = build_yt_dlp_args(
+        &request,
+        ffmpeg_location.as_deref(),
+        youtube_js_runtime.as_deref(),
+    );
     let output_paths = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
     let danmaku_format = request.danmaku_format.clone();
     let job_started_at = SystemTime::now();
@@ -3140,7 +3164,11 @@ fn build_cookie_args(cookie_mode: &CookieMode, manual_cookie_path: Option<&str>)
     }
 }
 
-fn build_yt_dlp_args(request: &DownloadRequest, ffmpeg_location: Option<&str>) -> Vec<String> {
+fn build_yt_dlp_args(
+    request: &DownloadRequest,
+    ffmpeg_location: Option<&str>,
+    youtube_js_runtime: Option<&str>,
+) -> Vec<String> {
     let mut args = vec![
         "--newline".to_string(),
         "--no-color".to_string(),
@@ -3157,6 +3185,12 @@ fn build_yt_dlp_args(request: &DownloadRequest, ffmpeg_location: Option<&str>) -
 
     if let Some(location) = ffmpeg_location {
         args.extend(["--ffmpeg-location".to_string(), location.to_string()]);
+    }
+
+    if request.urls.iter().any(|url| is_youtube_url(url)) {
+        if let Some(runtime) = youtube_js_runtime {
+            args.extend(["--js-runtimes".to_string(), runtime.to_string()]);
+        }
     }
 
     match request.preset {
@@ -3686,6 +3720,11 @@ fn detect_platform(url: &str) -> &'static str {
     } else {
         "Generic"
     }
+}
+
+fn is_youtube_url(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    lower.contains("youtube.com") || lower.contains("youtu.be")
 }
 
 fn is_bilibili_channel_url(url: &str) -> bool {
@@ -4736,7 +4775,7 @@ mod tests {
 
     #[test]
     fn chrome_cookie_mode_adds_cookies_from_browser_args() {
-        let args = build_yt_dlp_args(&request(CookieMode::Chrome, None), None);
+        let args = build_yt_dlp_args(&request(CookieMode::Chrome, None), None, None);
 
         assert!(args
             .windows(2)
@@ -4752,6 +4791,7 @@ mod tests {
                 Some("/tmp/cookies file.txt".to_string()),
             ),
             None,
+            None,
         );
 
         assert!(args
@@ -4762,7 +4802,7 @@ mod tests {
 
     #[test]
     fn url_and_download_path_remain_single_arguments() {
-        let args = build_yt_dlp_args(&request(CookieMode::None, None), None);
+        let args = build_yt_dlp_args(&request(CookieMode::None, None), None, None);
 
         assert!(args.iter().any(|arg| arg == "/tmp/download folder"));
         assert!(args
@@ -4794,7 +4834,11 @@ mod tests {
 
     #[test]
     fn best_video_prefers_quicktime_compatible_mp4() {
-        let args = build_yt_dlp_args(&request(CookieMode::None, None), Some("/tmp/ffmpeg-bin"));
+        let args = build_yt_dlp_args(
+            &request(CookieMode::None, None),
+            Some("/tmp/ffmpeg-bin"),
+            None,
+        );
 
         assert!(args
             .windows(2)
@@ -4805,6 +4849,17 @@ mod tests {
         assert!(args
             .windows(2)
             .any(|pair| pair[0] == "-f" && pair[1].contains("vcodec^=avc1")));
+    }
+
+    #[test]
+    fn youtube_download_uses_js_runtime_when_available() {
+        let mut request = request(CookieMode::None, None);
+        request.urls = vec!["https://www.youtube.com/watch?v=0ZwAHl6jpkg".to_string()];
+        let args = build_yt_dlp_args(&request, None, Some("node:/usr/local/bin/node"));
+
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--js-runtimes", "node:/usr/local/bin/node"]));
     }
 
     #[test]
@@ -4912,7 +4967,7 @@ mod tests {
         request.subtitle_mode = SubtitleMode::Both;
         request.subtitle_format = SubtitleFormat::Vtt;
         request.embed_subtitles = true;
-        let args = build_yt_dlp_args(&request, Some("/tmp/ffmpeg-bin"));
+        let args = build_yt_dlp_args(&request, Some("/tmp/ffmpeg-bin"), None);
 
         assert!(args.iter().any(|arg| arg == "--write-subs"));
         assert!(args.iter().any(|arg| arg == "--write-auto-subs"));
@@ -4926,7 +4981,7 @@ mod tests {
     fn danmaku_ass_requests_subtitle_sidecars() {
         let mut request = request(CookieMode::None, None);
         request.danmaku_format = DanmakuFormat::Ass;
-        let args = build_yt_dlp_args(&request, None);
+        let args = build_yt_dlp_args(&request, None, None);
 
         assert!(args.iter().any(|arg| arg == "--write-subs"));
         assert!(args.windows(2).any(|pair| pair == ["--sub-langs", "all"]));
